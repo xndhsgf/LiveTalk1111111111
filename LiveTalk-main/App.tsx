@@ -130,6 +130,63 @@ export default function App() {
 
   const t = translations[language];
 
+  // --- نظام التحكم الذكي بزر الرجوع في الموبايل ---
+  // نحدد مصفوفة بجميع حالات الـ UI المفتوحة
+  const isAnyModalOpen = showVIPModal || showSpecialIDModal || showEditProfileModal || 
+                         showBagModal || showWalletModal || showAdminPanel || 
+                         showCreateRoomModal || showAgencyModal || showCPModal || 
+                         showHostAgentDashboard || !!activeGame || !!selectedExternalGame || 
+                         showGlobalLeaderboard || showProfileSheet || !!privateChatPartner;
+
+  const isRoomActiveAndOpen = !!currentRoom && !isRoomMinimized;
+
+  // تأثير لمزامنة تاريخ المتصفح مع فتح النوافذ
+  useEffect(() => {
+    if (isAnyModalOpen || isRoomActiveAndOpen) {
+      // دفع حالة جديدة للتاريخ لمنع الخروج عند ضغط زر الرجوع
+      window.history.pushState({ layerOpen: true }, "");
+    }
+  }, [isAnyModalOpen, isRoomActiveAndOpen]);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // ترتيب الأولويات في الإغلاق عند ضغط زر الرجوع
+      if (showAdminPanel) { setShowAdminPanel(false); return; }
+      if (showVIPModal) { setShowVIPModal(false); return; }
+      if (showSpecialIDModal) { setShowSpecialIDModal(false); return; }
+      if (showEditProfileModal) { setShowEditProfileModal(false); return; }
+      if (showBagModal) { setShowBagModal(false); return; }
+      if (showWalletModal) { setShowWalletModal(false); return; }
+      if (showCreateRoomModal) { setShowCreateRoomModal(false); return; }
+      if (showAgencyModal) { setShowAgencyModal(false); return; }
+      if (showCPModal) { setShowCPModal(false); return; }
+      if (showHostAgentDashboard) { setShowHostAgentDashboard(false); return; }
+      if (showGlobalLeaderboard) { setShowGlobalLeaderboard(false); return; }
+      if (showProfileSheet) { setShowProfileSheet(false); return; }
+      if (activeGame) { setActiveGame(null); return; }
+      if (selectedExternalGame) { setSelectedExternalGame(null); return; }
+      if (privateChatPartner) { setPrivateChatPartner(null); return; }
+      
+      // إذا كانت الغرفة مفتوحة، نقوم بتصغيرها بدلاً من الخروج
+      if (currentRoom && !isRoomMinimized) {
+        setIsRoomMinimized(true);
+        return;
+      }
+
+      // إذا وصلنا هنا، يعني لا يوجد شيء مفتوح، نسمح للمتصفح بالخروج أو الرجوع الفعلي
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [
+    showVIPModal, showSpecialIDModal, showEditProfileModal, showBagModal, 
+    showWalletModal, showAdminPanel, showCreateRoomModal, showAgencyModal, 
+    showCPModal, showHostAgentDashboard, activeGame, selectedExternalGame, 
+    showGlobalLeaderboard, showProfileSheet, privateChatPartner, 
+    currentRoom, isRoomMinimized
+  ]);
+  // ------------------------------------------
+
   const isRootAdmin = useMemo(() => {
     const currentEmail = auth.currentUser?.email?.toLowerCase();
     const isIdOne = user?.customId?.toString() === '1';
@@ -381,8 +438,6 @@ export default function App() {
         coins: increment(-sid.price),
         wealth: increment(sid.price)
       });
-      // 2. وسم الآيدي كمباع
-      batch.update(doc(db, 'special_ids', sid.id), { isSold: true });
       
       await batch.commit();
       

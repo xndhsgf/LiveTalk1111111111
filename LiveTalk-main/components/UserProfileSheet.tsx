@@ -2,7 +2,7 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { User, Room } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, MessageCircle, Gift, Trophy, Star, Heart, Coins, Copy, ShieldCheck, MoreVertical, MicOff, UserX, RotateCcw, Users, Edit3 } from 'lucide-react';
+import { X, MessageCircle, Gift, Trophy, Star, Heart, Coins, Copy, ShieldCheck, MoreVertical, MicOff, UserX, RotateCcw, Users, Edit3, LogOut } from 'lucide-react';
 import { db } from '../services/firebase';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
 
@@ -63,6 +63,11 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
   const isModerator = currentRoom.moderators?.includes(currentUser.id);
   const canManage = (isHost || isModerator) && !isCurrentUser;
 
+  // التحقق هل المستخدم حالياً على المايك
+  const isOnMic = useMemo(() => {
+    return (currentRoom.speakers || []).some(s => s.id === user.id);
+  }, [currentRoom.speakers, user.id]);
+
   // حساب المستويات حياً من البيانات الخام
   const wealthLvl = calculateProfileLvl(Number(user.wealth || 0));
   const rechargeLvl = calculateProfileLvl(Number(user.rechargePoints || 0));
@@ -82,7 +87,7 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
         animate={{ y: 0 }} 
         exit={{ y: "100%" }} 
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="relative w-full max-w-md bg-[#030816] rounded-t-[3rem] border-t border-white/10 shadow-[0_-20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden h-[85vh]"
+        className="relative w-full max-w-md bg-[#030816] rounded-t-[3rem] border-t border-white/10 shadow-[0_-20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden h-[70vh]"
         dir="rtl"
       >
         {/* Background Cover */}
@@ -96,36 +101,27 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
         </div>
 
         {/* Top Header Buttons */}
-        <div className="relative z-20 h-44 w-full shrink-0">
+        <div className="relative z-20 h-32 w-full shrink-0">
           <div className="absolute top-6 right-6 flex items-center gap-2">
-             <button onClick={onClose} className="p-2.5 bg-black/40 backdrop-blur-md rounded-full text-white/70 hover:text-white border border-white/10 transition-all">
-               <X size={20} />
+             <button onClick={onClose} className="p-2 bg-black/40 backdrop-blur-md rounded-full text-white/70 hover:text-white border border-white/10 transition-all">
+               <X size={18} />
              </button>
           </div>
 
           <div className="absolute top-6 left-6 flex items-center gap-2">
-             {isCurrentUser && (
-                <button 
-                  onClick={() => onAction('edit')}
-                  className="p-2 bg-blue-600/60 backdrop-blur-md rounded-full text-white border border-blue-400/30 transition-all shadow-lg active:scale-90"
-                  title="تعديل الحساب"
-                >
-                  <Edit3 size={16} />
-                </button>
-             )}
              {canManage && (
                 <button 
                   onClick={() => setShowAdminMenu(!showAdminMenu)}
-                  className="p-2.5 bg-black/40 backdrop-blur-md rounded-full text-white/70 border border-white/10"
+                  className="p-2 bg-black/40 backdrop-blur-md rounded-full text-white/70 border border-white/10"
                 >
-                  <MoreVertical size={20} />
+                  <MoreVertical size={18} />
                 </button>
              )}
           </div>
 
           {/* User Avatar with Prominent Frame */}
-          <div className="absolute bottom-2 left-8">
-            <div className="relative w-28 h-28 flex items-center justify-center">
+          <div className="absolute bottom-0 left-8">
+            <div className="relative w-20 h-20 flex items-center justify-center">
               <div className="w-[82%] h-[82%] rounded-full border-4 border-[#030816] overflow-hidden bg-slate-800 shadow-2xl relative z-10">
                 <img src={user.avatar} className="w-full h-full object-cover" alt="avatar" />
               </div>
@@ -141,29 +137,29 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
         </div>
 
         {/* Content Body */}
-        <div className="relative z-20 flex-1 px-8 pt-6 pb-10 space-y-6 overflow-y-auto scrollbar-hide">
+        <div className="relative z-20 flex-1 px-8 pt-4 pb-10 space-y-5 overflow-y-auto scrollbar-hide">
           {/* Relationship Status */}
           {user.cpPartner && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-gradient-to-r from-purple-900/40 via-pink-600/30 to-purple-900/40 border border-pink-500/20 rounded-2xl p-3 flex items-center justify-center gap-4 shadow-xl backdrop-blur-sm"
+              className="bg-gradient-to-r from-purple-900/40 via-pink-600/30 to-purple-900/40 border border-pink-500/20 rounded-2xl p-2.5 flex items-center justify-center gap-4 shadow-xl backdrop-blur-sm"
             >
               <div className="flex items-center gap-3">
-                <img src={user.avatar} className="w-10 h-10 rounded-full border-2 border-pink-500/40 object-cover" alt="" />
+                <img src={user.avatar} className="w-8 h-8 rounded-full border-2 border-pink-500/40 object-cover" alt="" />
                 <div className="flex flex-col items-center gap-0.5">
-                   <Heart size={18} fill="#ec4899" className="text-pink-500 animate-pulse" />
-                   <span className="text-[7px] font-black text-pink-300 uppercase tracking-widest">Sweet Couple</span>
+                   <Heart size={14} fill="#ec4899" className="text-pink-500 animate-pulse" />
+                   <span className="text-[6px] font-black text-pink-300 uppercase tracking-widest">Sweet Couple</span>
                 </div>
-                <img src={user.cpPartner.avatar} className="w-10 h-10 rounded-full border-2 border-pink-500/40 object-cover shadow-lg" alt="" />
+                <img src={user.cpPartner.avatar} className="w-8 h-8 rounded-full border-2 border-pink-500/40 object-cover shadow-lg" alt="" />
               </div>
             </motion.div>
           )}
 
           {/* Name and Levels */}
-          <div className="text-right space-y-4">
+          <div className="text-right space-y-3">
             <div className="flex items-center justify-start gap-3 flex-wrap flex-row-reverse">
-                <h2 className="text-3xl font-black text-white tracking-tight drop-shadow-lg">{user.name}</h2>
+                <h2 className="text-xl font-black text-white tracking-tight drop-shadow-lg">{user.name}</h2>
                 <div className="flex items-center gap-1">
                    <ProfileLevelBadge level={wealthLvl} type="wealth" />
                    <ProfileLevelBadge level={rechargeLvl} type="recharge" />
@@ -172,25 +168,25 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
             
             <button 
               onClick={() => { navigator.clipboard.writeText(user.customId || user.id); alert('تم نسخ الـ ID'); }}
-              className="relative inline-flex items-center justify-center min-h-[40px] group"
+              className="relative inline-flex items-center justify-center min-h-[36px] group"
             >
               {user.badge ? (
-                <div className="relative flex items-center justify-center h-12 min-w-[120px] px-6">
+                <div className="relative flex items-center justify-center h-9 min-w-[100px] px-4">
                    <img src={user.badge} className="absolute inset-0 w-full h-full object-contain z-0 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)] transition-transform group-active:scale-95" alt="ID Badge" />
-                   <span className="relative z-10 text-white font-black text-[13px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] ml-6 uppercase">ID: {user.customId || user.id}</span>
+                   <span className="relative z-10 text-white font-black text-[11px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] ml-5 uppercase">ID: {user.customId || user.id}</span>
                 </div>
               ) : (
-                <div className="bg-[#3b82f6] text-white px-5 py-2 rounded-full text-xs font-black flex items-center gap-2 w-fit shadow-lg shadow-blue-900/20 active:scale-95 transition-all">
+                <div className="bg-[#3b82f6] text-white px-3 py-1 rounded-full text-[9px] font-black flex items-center gap-2 w-fit shadow-lg shadow-blue-900/20 active:scale-95 transition-all">
                    ID: {user.customId || user.id}
-                   <Copy size={12} className="opacity-60" />
+                   <Copy size={9} className="opacity-60" />
                 </div>
               )}
             </button>
           </div>
 
           {/* Medals / Achievements */}
-          <div className="pt-2">
-             <div className="flex flex-wrap gap-4 items-center">
+          <div className="pt-1">
+             <div className="flex flex-wrap gap-2.5 items-center">
                 {user.achievements && user.achievements.length > 0 ? (
                    user.achievements.map((medal, idx) => (
                       <motion.div 
@@ -198,42 +194,52 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
                         animate={{ scale: 1, opacity: 1 }} 
                         transition={{ delay: idx * 0.05 }}
                         key={idx} 
-                        className="w-20 h-20 flex items-center justify-center p-0 transition-transform hover:scale-110"
+                        className="w-14 h-14 flex items-center justify-center p-0 transition-transform hover:scale-110"
                       >
                          <img src={medal} className="w-full h-full object-contain filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)]" alt="" />
                       </motion.div>
                    ))
                 ) : (
-                   <div className="w-full text-center py-6 bg-black/40 backdrop-blur-md rounded-3xl border border-white/5">
-                      <p className="text-xs text-slate-500 font-bold">لا توجد أوسمة معروضة حالياً</p>
+                   <div className="w-full text-center py-5 bg-black/40 backdrop-blur-md rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-slate-500 font-bold">لا توجد أوسمة معروضة حالياً</p>
                    </div>
                 )}
              </div>
           </div>
 
           {/* Actions */}
-          <div className="flex gap-4 pt-6">
-             <button 
-               onClick={() => onAction('gift')}
-               className="flex-1 bg-gradient-to-r from-[#d946ef] via-[#ec4899] to-[#8b5cf6] text-white font-black py-4 rounded-[2rem] flex items-center justify-center gap-3 shadow-2xl shadow-pink-900/40 active:scale-95 transition-all text-sm uppercase tracking-wider"
-             >
-               إرسال هدية <Gift size={20} fill="currentColor" />
-             </button>
-             
-             {!isCurrentUser && (
+          <div className="flex gap-3 pt-2">
+             {isCurrentUser ? (
+                <>
+                  {isOnMic && (
+                    <button 
+                      onClick={() => { onAction('leaveMic'); onClose(); }}
+                      className="w-full bg-red-600/20 border border-red-500/40 text-red-500 font-black py-3 rounded-2xl flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all text-xs"
+                    >
+                      النزول من المايك <LogOut size={16} />
+                    </button>
+                  )}
+                </>
+             ) : (
                <>
                  <button 
+                   onClick={() => onAction('gift')}
+                   className="flex-1 bg-gradient-to-r from-[#d946ef] via-[#ec4899] to-[#8b5cf6] text-white font-black py-3 rounded-2xl flex items-center justify-center gap-2 shadow-2xl shadow-pink-900/40 active:scale-95 transition-all text-xs uppercase tracking-wider"
+                 >
+                   إرسال هدية <Gift size={18} fill="currentColor" />
+                 </button>
+                 <button 
                    onClick={() => { onAction('cp'); onClose(); }}
-                   className="w-16 h-16 bg-pink-600/20 backdrop-blur-md border border-pink-500/30 rounded-full flex items-center justify-center text-pink-500 active:scale-90 transition-all shadow-xl"
+                   className="w-12 h-12 bg-pink-600/20 backdrop-blur-md border border-pink-500/30 rounded-2xl flex items-center justify-center text-pink-500 active:scale-90 transition-all shadow-xl"
                    title="طلب ارتباط"
                  >
-                   <Heart size={26} fill="currentColor" />
+                   <Heart size={20} fill="currentColor" />
                  </button>
                  <button 
                    onClick={() => { onAction('message'); onClose(); }}
-                   className="w-16 h-16 bg-white/10 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-white active:scale-90 transition-all shadow-xl"
+                   className="w-12 h-12 bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-center text-white active:scale-90 transition-all shadow-xl"
                  >
-                   <MessageCircle size={26} />
+                   <MessageCircle size={20} />
                  </button>
                </>
              )}

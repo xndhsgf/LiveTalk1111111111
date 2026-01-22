@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../../services/firebase';
 import { doc, collection, addDoc, updateDoc, increment, serverTimestamp, writeBatch, onSnapshot, getDoc, query, orderBy, limit, where, Timestamp, setDoc, deleteDoc, arrayUnion, getDocs } from 'firebase/firestore';
@@ -488,6 +489,12 @@ const VoiceRoom: React.FC<any> = ({
     }
   };
 
+  const handleLeaveMic = useCallback(() => {
+    const updated = localSpeakers.filter(s => s.id !== currentUser.id);
+    setLocalSpeakers(updated);
+    queueRoomSpeakersUpdate(updated);
+  }, [localSpeakers, currentUser.id, queueRoomSpeakersUpdate]);
+
   const currentSkin = micSkins[localMicCount] || undefined;
   const seats = Array.from({ length: localMicCount }).map((_, i) => localSpeakers.find(s => s.seatIndex === i) || null);
 
@@ -597,11 +604,10 @@ const VoiceRoom: React.FC<any> = ({
       {showMembers && <RoomMembersModal isOpen={showMembers} onClose={() => setShowMembers(false)} room={room} speakers={localSpeakers} listeners={activeListeners} onSelectUser={(u) => { setSelectedUserForProfile(u); setShowProfileSheet(true); }} />}
       {showLuckyBag && <LuckyBagModal isOpen={showLuckyBag} onClose={() => setShowLuckyBag(false)} userCoins={Number(currentUser.coins)} onSend={handleSendLuckyBag} />}
       <GameCenterModal isOpen={showGameCenter} onClose={() => setShowGameCenter(false)} onSelectGame={(game) => { setActiveGame(game); setShowGameCenter(false); }} />
-      {/* Fix: replaced 'user' with 'currentUser' which is available as a prop */}
       {activeGame === 'wheel' && <WheelGameModal isOpen={activeGame === 'wheel'} onClose={() => setActiveGame(null)} userCoins={Number(currentUser.coins)} onUpdateCoins={(c) => onUpdateUser({ coins: c })} winRate={gameSettings.wheelWinRate} gameSettings={gameSettings} />}
       {activeGame === 'slots' && <SlotsGameModal isOpen={activeGame === 'slots'} onClose={() => setActiveGame(null)} userCoins={Number(currentUser.coins)} onUpdateCoins={(c) => onUpdateUser({ coins: c })} winRate={gameSettings.slotsWinRate} gameSettings={gameSettings} />}
       {activeGame === 'lion' && <LionWheelGameModal isOpen={activeGame === 'lion'} onClose={() => setActiveGame(null)} userCoins={Number(currentUser.coins)} onUpdateCoins={(c) => onUpdateUser({ coins: c })} gameSettings={gameSettings} />}
-      <AnimatePresence>{showProfileSheet && selectedUserForProfile && (<UserProfileSheet user={selectedUserForProfile} onClose={() => setShowProfileSheet(false)} isCurrentUser={selectedUserForProfile.id === currentUser.id} onAction={(action) => { if (action === 'gift') setShowGifts(true); if (action === 'message') onOpenPrivateChat(selectedUserForProfile); if (action === 'edit') setShowEditProfileModal(true); if (action === 'resetUserCharm') { const updated = localSpeakers.map(s => s.id === selectedUserForProfile.id ? { ...s, charm: 0 } : s); setLocalSpeakers(updated); queueRoomSpeakersUpdate(updated); } }} currentUser={currentUser} allUsers={users} currentRoom={room} />)}</AnimatePresence>
+      <AnimatePresence>{showProfileSheet && selectedUserForProfile && (<UserProfileSheet user={selectedUserForProfile} onClose={() => setShowProfileSheet(false)} isCurrentUser={selectedUserForProfile.id === currentUser.id} onAction={(action) => { if (action === 'gift') setShowGifts(true); if (action === 'message') onOpenPrivateChat(selectedUserForProfile); if (action === 'edit') setShowEditProfileModal(true); if (action === 'leaveMic') handleLeaveMic(); if (action === 'resetUserCharm') { const updated = localSpeakers.map(s => s.id === selectedUserForProfile.id ? { ...s, charm: 0 } : s); setLocalSpeakers(updated); queueRoomSpeakersUpdate(updated); } }} currentUser={currentUser} allUsers={users} currentRoom={room} />)}</AnimatePresence>
       <AnimatePresence>{showEditProfileModal && <EditProfileModal isOpen={showEditProfileModal} onClose={() => setShowEditProfileModal(false)} currentUser={currentUser} onSave={onUpdateUser} />}</AnimatePresence>
     </div>
   );

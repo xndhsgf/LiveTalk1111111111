@@ -92,7 +92,7 @@ const SpecialIDShopModal: React.FC<SpecialIDShopModalProps> = ({ isOpen, onClose
               </div>
            ) : (
              <div className="grid grid-cols-2 gap-3">
-                {specialIds.filter(sid => !sid.isSold).map(sid => (
+                {specialIds.map(sid => (
                    <motion.div 
                      whileHover={{ y: -5 }}
                      key={sid.id}

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Gamepad2, Plus, Globe, Trash2, Edit3, Save, X, Upload, Link as LinkIcon, Smartphone, ShieldCheck } from 'lucide-react';
+import { Gamepad2, Plus, Globe, Trash2, Edit3, Save, X, Upload, Link as LinkIcon, Smartphone, ShieldCheck, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../../services/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
@@ -50,8 +50,8 @@ const AdminExternalGames: React.FC<AdminExternalGamesProps> = ({ handleFileUploa
 
   return (
     <div className="space-y-8 text-right font-cairo select-none" dir="rtl">
-      <div className="bg-slate-950/40 p-8 rounded-[2.5rem] border border-white/10 shadow-2xl flex flex-col md:flex-row justify-between items-center gap-6">
-        <div>
+      <div className="bg-slate-950/40 p-8 rounded-[2.5rem] border border-white/10 shadow-2xl flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
+        <div className="relative z-10">
           <h3 className="text-2xl font-black text-white flex items-center gap-3">
             <Gamepad2 className="text-emerald-500" size={32} /> مركز ربط الألعاب الخارجية
           </h3>
@@ -84,21 +84,27 @@ const AdminExternalGames: React.FC<AdminExternalGamesProps> = ({ handleFileUploa
                     <label className="text-[10px] font-black text-slate-500 pr-2">اسم اللعبة</label>
                     <input type="text" value={editingGame.title} onChange={e => setEditingGame({...editingGame, title: e.target.value})} placeholder="مثلاً: بوبو لودو" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm" />
                   </div>
+                  
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-500 pr-2 uppercase">رابط اللعبة (محمي)</label>
+                    <label className="text-[10px] font-black text-slate-500 pr-2 uppercase">رابط اللعبة المباشر</label>
                     <div className="relative">
                        <input 
                          type="text" 
-                         value={editingGame.url && !isEditing ? "**************** (Protected)" : editingGame.url} 
+                         value={editingGame.url} 
                          onChange={e => setEditingGame({...editingGame, url: e.target.value})}
-                         placeholder="الصق رابط اللعبة هنا..."
+                         placeholder="https://your-game-site.com/index.html"
                          dir="ltr"
-                         className="w-full bg-black/40 border border-white/10 rounded-xl p-4 pl-12 text-blue-400 text-[10px] font-bold outline-none"
+                         className="w-full bg-black/40 border border-white/10 rounded-xl p-4 pl-12 text-blue-400 text-[10px] font-bold outline-none focus:border-emerald-500/50"
                        />
-                       <ShieldCheck size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 opacity-50" />
+                       <LinkIcon size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                    </div>
+                    <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl flex items-start gap-2 mt-2">
+                       <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                       <p className="text-[9px] text-amber-200/70 font-bold leading-relaxed">ملاحظة: تأكد أن الموقع يدعم "Embedding" ولا يحجب العرض داخل iframes. يجب أن يكون الرابط مشفراً بـ HTTPS.</p>
                     </div>
                   </div>
-                  <button disabled={loading} onClick={handleSave} className="w-full py-5 bg-emerald-600 text-white font-black rounded-2xl text-sm shadow-xl">
+
+                  <button disabled={loading} onClick={handleSave} className="w-full py-5 bg-emerald-600 text-white font-black rounded-2xl text-sm shadow-xl active:scale-95 transition-transform">
                     {loading ? 'جاري الحفظ...' : 'نشر اللعبة في مركز النشاطات'}
                   </button>
                </div>
