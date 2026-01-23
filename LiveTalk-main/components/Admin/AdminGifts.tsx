@@ -6,10 +6,12 @@ import { Gift, GiftAnimationType, GiftDisplaySize } from '../../types';
 import { db } from '../../services/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
+// Added isRootAdmin?: boolean; to interface
 interface AdminGiftsProps {
   gifts: Gift[];
   onSaveGift: (gift: Gift, isDelete?: boolean) => Promise<void>;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => void;
+  isRootAdmin?: boolean;
 }
 
 const animationTypes: { id: GiftAnimationType; label: string }[] = [
@@ -32,7 +34,8 @@ const sizeOptions: { id: GiftDisplaySize; label: string }[] = [
   { id: 'max', label: 'شاشة فائقة (Cover Full)' },
 ];
 
-const AdminGifts: React.FC<AdminGiftsProps> = ({ gifts, onSaveGift, handleFileUpload }) => {
+// Added isRootAdmin to component destructuring
+const AdminGifts: React.FC<AdminGiftsProps> = ({ gifts, onSaveGift, handleFileUpload, isRootAdmin }) => {
   const [editingGift, setEditingGift] = useState<Partial<Gift> | null>(null);
   const [isUploadingIcon, setIsUploadingIcon] = useState(false);
   const [isUploadingContent, setIsUploadingContent] = useState(false);

@@ -6,11 +6,13 @@ import { db } from '../../services/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { SpecialIDItem } from '../../types';
 
+// Added isRootAdmin?: boolean; to interface
 interface AdminSpecialIDsProps {
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => void;
+  isRootAdmin?: boolean;
 }
 
-const AdminSpecialIDs: React.FC<AdminSpecialIDsProps> = ({ handleFileUpload }) => {
+const AdminSpecialIDs: React.FC<AdminSpecialIDsProps> = ({ handleFileUpload, isRootAdmin }) => {
   const [specialIds, setSpecialIds] = useState<SpecialIDItem[]>([]);
   const [storeBackground, setStoreBackground] = useState('');
   const [bgUrlInput, setBgUrlInput] = useState('');

@@ -1,3 +1,4 @@
+
 import AgoraRTC, { IAgoraRTCClient, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
 
 const APP_ID = "9209e41821f34b4bb3d5bc8391d86cdc";
@@ -5,12 +6,17 @@ const APP_ID = "9209e41821f34b4bb3d5bc8391d86cdc";
 class AgoraService {
   private client: IAgoraRTCClient | null = null;
   private localAudioTrack: IMicrophoneAudioTrack | null = null;
-  private isInitialized = false;
   private isJoined = false;
-  private joinPromise: Promise<void> | null = null;
+  private joinInProgress = false;
+
+  constructor() {
+    // تقليل مستوى السجلات لتجنب ازدحام الكونسول وتحسين الأداء
+    AgoraRTC.setLogLevel(2); 
+  }
 
   async init() {
-    if (this.isInitialized) return;
+    if (this.client) return;
+    
     this.client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
     
     // إعداد المستمعين للأصوات البعيدة
@@ -26,78 +32,72 @@ class AgoraService {
     });
 
     this.client.on("user-unpublished", (user) => {
-      user.audioTrack?.stop();
+      if (user.audioTrack) {
+        user.audioTrack.stop();
+      }
     });
-
-    this.isInitialized = true;
   }
 
   async join(channelName: string, uid: string) {
-    if (this.isJoined) return;
-    if (this.joinPromise) return this.joinPromise;
-
-    await this.init();
+    // منع الانضمام المتكرر إذا كانت هناك عملية جارية أو تم الانضمام بالفعل
+    if (this.isJoined || this.joinInProgress) return;
     
-    this.joinPromise = (async () => {
-      try {
-        await this.client?.join(APP_ID, channelName, null, uid);
-        this.isJoined = true;
-        console.log("Joined Agora Channel:", channelName);
-      } catch (e) {
-        console.error("Agora Join Error:", e);
-        this.isJoined = false;
-        throw e;
-      } finally {
-        this.joinPromise = null;
-      }
-    })();
+    await this.init();
+    if (!this.client) return;
 
-    return this.joinPromise;
+    this.joinInProgress = true;
+    try {
+      await this.client.join(APP_ID, channelName, null, uid);
+      this.isJoined = true;
+      console.log(`[Agora] Joined channel: ${channelName}`);
+    } catch (e: any) {
+      // تجاهل أخطاء التداخل البسيطة التي يسببها React lifecycle
+      if (e.code !== "WS_ABORT") {
+        console.error("[Agora] Join Error:", e);
+      }
+      this.isJoined = false;
+      throw e;
+    } finally {
+      this.joinInProgress = false;
+    }
   }
 
   async publishAudio() {
-    // الانتظار حتى اكتمال الانضمام إذا كان جارياً
-    if (this.joinPromise) {
-      await this.joinPromise;
-    }
-
-    if (!this.isJoined || !this.client) {
-      console.warn("Agora: Cannot publish, client not joined yet.");
-      return;
-    }
+    if (!this.isJoined || !this.client) return;
 
     try {
       if (!this.localAudioTrack) {
         this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-          AEC: true, ANS: true, AGC: true
+          AEC: true, // إلغاء الصدى
+          ANS: true, // تقليل الضوضاء
+          AGC: true  // التحكم التلقائي في مستوى الصوت
         });
       }
       
-      // التحقق من حالة الاتصال قبل النشر
-      if (this.client.connectionState === "CONNECTED") {
+      // التأكد من عدم النشر المزدوج
+      if (this.client.localTracks.length === 0) {
         await this.client.publish(this.localAudioTrack);
-        console.log("Audio Published");
+        console.log("[Agora] Audio Track Published");
       }
     } catch (e) {
-      console.error("Agora Publish Error:", e);
+      console.error("[Agora] Publish Error:", e);
     }
   }
 
   async unpublishAudio() {
-    if (!this.isJoined || !this.client) return;
+    if (!this.client || !this.localAudioTrack) return;
 
     try {
-      if (this.localAudioTrack) {
-        if (this.client.connectionState === "CONNECTED") {
-          await this.client.unpublish(this.localAudioTrack);
-        }
-        this.localAudioTrack.stop();
-        this.localAudioTrack.close();
-        this.localAudioTrack = null;
-        console.log("Audio Unpublished");
+      // إلغاء النشر فقط إذا كان هناك مسار نشط
+      if (this.client.localTracks.length > 0) {
+        await this.client.unpublish(this.localAudioTrack);
       }
+      this.localAudioTrack.stop();
+      this.localAudioTrack.close();
+      this.localAudioTrack = null;
+      console.log("[Agora] Audio Track Unpublished");
     } catch (e) {
-      console.error("Agora Unpublish Error:", e);
+      console.error("[Agora] Unpublish Error:", e);
     }
   }
 
@@ -106,7 +106,7 @@ class AgoraService {
       try {
         await this.localAudioTrack.setEnabled(!muted);
       } catch (e) {
-        console.error("Agora Mute Error:", e);
+        console.error("[Agora] Mute State Update Error:", e);
       }
     }
   }
@@ -114,14 +114,19 @@ class AgoraService {
   async leave() {
     try {
       await this.unpublishAudio();
+      
       if (this.client) {
-        await this.client.leave();
+        // التأكد من أن حالة الاتصال تسمح بالمغادرة
+        if (this.isJoined) {
+          await this.client.leave();
+        }
       }
+      
       this.isJoined = false;
-      this.joinPromise = null;
-      console.log("Left Agora Channel");
+      this.joinInProgress = false;
+      console.log("[Agora] Left channel and cleaned up resources");
     } catch (e) {
-      console.error("Agora Leave Error:", e);
+      console.error("[Agora] Leave Error:", e);
     }
   }
 }

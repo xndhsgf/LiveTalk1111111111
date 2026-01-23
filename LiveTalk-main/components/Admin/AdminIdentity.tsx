@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Smartphone, Camera, Image as ImageIcon, Edit3, Save, Link as LinkIcon } from 'lucide-react';
 
+// Added isRootAdmin?: boolean; to interface
 interface AdminIdentityProps {
   appLogo: string;
   appBanner: string;
@@ -12,12 +13,14 @@ interface AdminIdentityProps {
   onUpdateAppName: (name: string) => void;
   onUpdateAuthBackground: (url: string) => void;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => void;
+  isRootAdmin?: boolean;
 }
 
+// Added isRootAdmin to component destructuring
 const AdminIdentity: React.FC<AdminIdentityProps> = ({ 
   appLogo, appBanner, appName, authBackground, 
   onUpdateAppLogo, onUpdateAppBanner, onUpdateAppName, onUpdateAuthBackground,
-  handleFileUpload 
+  handleFileUpload, isRootAdmin
 }) => {
   const [localAppName, setLocalAppName] = useState(appName);
   const [logoLink, setLogoLink] = useState('');

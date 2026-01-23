@@ -6,11 +6,14 @@ import { db } from '../../services/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { Banner } from '../../types';
 
+// Added isRootAdmin?: boolean; to interface
 interface AdminBannersProps {
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => void;
+  isRootAdmin?: boolean;
 }
 
-const AdminBanners: React.FC<AdminBannersProps> = ({ handleFileUpload }) => {
+// Added isRootAdmin to component destructuring
+const AdminBanners: React.FC<AdminBannersProps> = ({ handleFileUpload, isRootAdmin }) => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newBanner, setNewBanner] = useState<Partial<Banner>>({ imageUrl: '', link: '', title: '' });
@@ -120,12 +123,7 @@ const AdminBanners: React.FC<AdminBannersProps> = ({ handleFileUpload }) => {
                     )}
                     <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity z-20">
                        <Upload size={32} className="text-white" />
-                       <input 
-                         type="file" 
-                         accept="image/*" 
-                         className="hidden" 
-                         onChange={(e) => handleFileUpload(e, (url) => setNewBanner({...newBanner, imageUrl: url}), 800, 300)} 
-                       />
+                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, (url) => setNewBanner({...newBanner, imageUrl: url}), 800, 300)} />
                     </label>
                   </div>
                </div>

@@ -6,9 +6,11 @@ import { User } from '../../types';
 import { db } from '../../services/firebase';
 import { doc, getDoc, setDoc, arrayUnion, arrayRemove, updateDoc } from 'firebase/firestore';
 
+// Added isRootAdmin?: boolean; to interface
 interface AdminBadgesProps {
   users: User[];
   onUpdateUser: (userId: string, data: Partial<User>) => Promise<void>;
+  isRootAdmin?: boolean;
 }
 
 const compressImage = (base64: string, maxWidth: number, maxHeight: number, quality: number = 0.2): Promise<string> => {
@@ -37,7 +39,8 @@ const compressImage = (base64: string, maxWidth: number, maxHeight: number, qual
   });
 };
 
-const AdminBadges: React.FC<AdminBadgesProps> = ({ users, onUpdateUser }) => {
+// Added isRootAdmin to component destructuring
+const AdminBadges: React.FC<AdminBadgesProps> = ({ users, onUpdateUser, isRootAdmin }) => {
   const [globalMedals, setGlobalMedals] = useState<string[]>([]);
   const [autoAgentMedal, setAutoAgentMedal] = useState<string | null>(null);
   const [autoHostMedal, setAutoHostMedal] = useState<string | null>(null);

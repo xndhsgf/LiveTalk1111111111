@@ -4,13 +4,16 @@ import { Plus, Crown, Edit3, Trash2, X, Upload, Image as ImageIcon, Star, Save, 
 import { motion, AnimatePresence } from 'framer-motion';
 import { VIPPackage } from '../../types';
 
+// Added isRootAdmin?: boolean; to interface
 interface AdminVIPProps {
   vipLevels: VIPPackage[];
   onSaveVip: (vip: VIPPackage, isDelete?: boolean) => Promise<void>;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => void;
+  isRootAdmin?: boolean;
 }
 
-const AdminVIP: React.FC<AdminVIPProps> = ({ vipLevels, onSaveVip, handleFileUpload }) => {
+// Added isRootAdmin to component destructuring
+const AdminVIP: React.FC<AdminVIPProps> = ({ vipLevels, onSaveVip, handleFileUpload, isRootAdmin }) => {
   const [editingVip, setEditingVip] = useState<Partial<VIPPackage> | null>(null);
   const [newPrivilege, setNewPrivilege] = useState('');
 

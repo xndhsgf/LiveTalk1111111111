@@ -6,11 +6,13 @@ import { db } from '../../services/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { ExternalGame } from '../../types';
 
+// Added isRootAdmin?: boolean; to interface
 interface AdminExternalGamesProps {
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => void;
+  isRootAdmin?: boolean;
 }
 
-const AdminExternalGames: React.FC<AdminExternalGamesProps> = ({ handleFileUpload }) => {
+const AdminExternalGames: React.FC<AdminExternalGamesProps> = ({ handleFileUpload, isRootAdmin }) => {
   const [games, setGames] = useState<ExternalGame[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingGame, setEditingGame] = useState<Partial<ExternalGame>>({ title: '', url: '', icon: '', description: '', isActive: true });

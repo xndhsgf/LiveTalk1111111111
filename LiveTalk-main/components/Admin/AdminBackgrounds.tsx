@@ -5,11 +5,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../../services/firebase';
 import { doc, getDoc, setDoc, arrayUnion, arrayRemove, updateDoc } from 'firebase/firestore';
 
+// Added isRootAdmin?: boolean; to interface
 interface AdminBackgroundsProps {
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => void;
+  isRootAdmin?: boolean;
 }
 
-const AdminBackgrounds: React.FC<AdminBackgroundsProps> = ({ handleFileUpload }) => {
+// Added isRootAdmin to component destructuring
+const AdminBackgrounds: React.FC<AdminBackgroundsProps> = ({ handleFileUpload, isRootAdmin }) => {
   const [backgrounds, setBackgrounds] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [newBgUrl, setNewBgUrl] = useState('');

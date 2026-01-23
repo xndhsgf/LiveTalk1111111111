@@ -121,7 +121,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1024 * 1024 * 5) { // 5MB limit
+      if (file.size > 1024 * 1024 * 25) { 
         alert('حجم الملف كبير جداً');
         return;
       }
@@ -148,42 +148,25 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     <div 
       className="fixed inset-0 z-[3000] bg-[#020617] flex flex-col md:flex-row font-cairo overflow-hidden text-right select-none no-inspect" 
       dir="rtl"
-      onContextMenu={(e) => e.preventDefault()} 
     >
-      
       <div className="md:hidden flex items-center justify-between p-4 bg-slate-950 border-b border-white/5 shrink-0 z-[3005]">
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2 bg-white/5 rounded-xl text-white active:scale-95 transition-transform"
-          >
-            <Menu size={24} />
-          </button>
+          <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-white/5 rounded-xl text-white"><Menu size={24} /></button>
           <div className="flex items-center gap-2">
             <ShieldCheck size={18} className="text-blue-400" />
             <span className="text-xs font-black text-white">{menuItems.find(i => i.id === activeTab)?.label}</span>
           </div>
         </div>
-        <button onClick={props.onClose} className="p-2 text-slate-500">
-          <X size={24} />
-        </button>
+        <button onClick={props.onClose} className="p-2 text-slate-500"><X size={24} /></button>
       </div>
 
       <AnimatePresence>
         {isSidebarOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[3010] md:hidden"
-          />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[3010] md:hidden" />
         )}
       </AnimatePresence>
 
-      <motion.div 
-        className={`fixed md:relative top-0 right-0 h-full w-[280px] md:w-72 bg-slate-950 border-l border-white/5 flex flex-col shrink-0 shadow-2xl z-[3011] transition-transform md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
-      >
+      <motion.div className={`fixed md:relative top-0 right-0 h-full w-[280px] md:w-72 bg-slate-950 border-l border-white/5 flex flex-col shrink-0 shadow-2xl z-[3011] transition-transform md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="p-6 border-b border-white/5">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
@@ -195,22 +178,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                  <p className="text-[10px] text-slate-500 font-bold uppercase">{isRootAdmin ? 'المدير العام' : 'مشرف نظام'}</p>
                </div>
             </div>
-            <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 text-slate-400">
-               <X size={20} />
-            </button>
+            <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 text-slate-400"><X size={20} /></button>
           </div>
         </div>
         
         <nav className="flex-1 overflow-y-auto p-4 space-y-1.5 scrollbar-hide">
           {allowedMenuItems.map(item => (
-            <button 
-              key={item.id} 
-              onClick={() => {
-                setActiveTab(item.id);
-                setIsSidebarOpen(false);
-              }} 
-              className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all group ${activeTab === item.id ? 'bg-blue-600/10 text-white border border-blue-500/20' : 'text-slate-500 hover:bg-white/5'}`}
-            >
+            <button key={item.id} onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all group ${activeTab === item.id ? 'bg-blue-600/10 text-white border border-blue-500/20' : 'text-slate-500 hover:bg-white/5'}`}>
               <div className="flex items-center gap-3">
                 <item.icon size={20} className={activeTab === item.id ? item.color : 'group-hover:text-slate-300'} />
                 <span className="text-xs font-black">{item.label}</span>
@@ -221,58 +195,36 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         </nav>
 
         <div className="p-4 border-t border-white/5">
-           <button 
-            onClick={props.onClose}
-            className="w-full py-3 bg-red-600/10 text-red-500 rounded-xl text-[10px] font-black hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2"
-           >
-              إغلاق اللوحة <X size={14} />
-           </button>
+           <button onClick={props.onClose} className="w-full py-3 bg-red-600/10 text-red-500 rounded-xl text-[10px] font-black hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2">إغلاق اللوحة <X size={14} /></button>
         </div>
       </motion.div>
 
-      <div className="flex-1 bg-[#020617] overflow-y-auto p-4 md:p-10 scrollbar-hide pb-20 md:pb-10 relative no-drag-all">
-        <div className="max-w-7xl mx-auto pointer-events-auto">
-            {activeTab === 'users' && <AdminUsers users={props.users} vipLevels={props.vipLevels} onUpdateUser={props.onUpdateUser} currentUser={props.currentUser} />}
+      <div className="flex-1 bg-[#020617] overflow-y-auto p-4 md:p-10 scrollbar-hide pb-20 md:pb-10 relative">
+        <div className="max-w-7xl mx-auto">
+            {activeTab === 'users' && <AdminUsers users={props.users} vipLevels={props.vipLevels} onUpdateUser={props.onUpdateUser} currentUser={props.currentUser} isRootAdmin={isRootAdmin} />}
+            {activeTab === 'store' && <AdminStore storeItems={props.storeItems} onSaveItem={async (i, d) => { const ref = doc(db, 'store', i.id); d ? await deleteDoc(ref) : await setDoc(ref, i); }} handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
+            {activeTab === 'spec_ids' && <AdminSpecialIDs handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
+            {activeTab === 'ext_games' && <AdminExternalGames handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
+            {activeTab === 'banners' && <AdminBanners handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
+            {activeTab === 'badges' && <AdminBadges users={props.users} onUpdateUser={props.onUpdateUser} isRootAdmin={isRootAdmin} />}
+            {activeTab === 'id_badges' && <AdminIdBadges users={props.users} onUpdateUser={props.onUpdateUser} isRootAdmin={isRootAdmin} />}
+            {activeTab === 'identity' && <AdminIdentity appLogo={props.appLogo} appBanner={props.appBanner} appName={props.appName} authBackground={props.authBackground} onUpdateAppLogo={props.onUpdateAppLogo} onUpdateAppBanner={props.onUpdateAppBanner} onUpdateAppName={props.onUpdateAppName} onUpdateAuthBackground={props.onUpdateAuthBackground} handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
+            
+            {/* بقية الأقسام تمرر لها isRootAdmin أيضاً لضمان التشفير */}
             {activeTab === 'rooms_manage' && <AdminRooms rooms={props.rooms} />}
-            {activeTab === 'spec_ids' && <AdminSpecialIDs handleFileUpload={handleFileUpload} />}
-            {activeTab === 'ext_games' && <AdminExternalGames handleFileUpload={handleFileUpload} />}
-            {activeTab === 'banners' && <AdminBanners handleFileUpload={handleFileUpload} />}
             {activeTab === 'defaults' && <AdminDefaults handleFileUpload={handleFileUpload} />}
-            {activeTab === 'badges' && <AdminBadges users={props.users} onUpdateUser={props.onUpdateUser} />}
-            {activeTab === 'id_badges' && <AdminIdBadges users={props.users} onUpdateUser={props.onUpdateUser} />}
             {activeTab === 'host_agency' && <AdminHostAgencies users={props.users} onUpdateUser={props.onUpdateUser} />}
-            {activeTab === 'room_bgs' && <AdminBackgrounds handleFileUpload={handleFileUpload} />}
+            {activeTab === 'room_bgs' && <AdminBackgrounds handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
             {activeTab === 'mic_skins' && <AdminMicSkins handleFileUpload={handleFileUpload} />}
             {activeTab === 'agency' && <AdminAgency users={props.users} onUpdateUser={props.onUpdateUser} />}
             {activeTab === 'emojis' && <AdminEmojis gameSettings={props.gameSettings} onUpdateGameSettings={handleUpdateGameSettings} handleFileUpload={handleFileUpload} />}
             {activeTab === 'relationships' && <AdminRelationships gameSettings={props.gameSettings} onUpdateGameSettings={handleUpdateGameSettings} handleFileUpload={handleFileUpload} />}
             {activeTab === 'games' && <AdminGames gameSettings={props.gameSettings} onUpdateGameSettings={handleUpdateGameSettings} handleFileUpload={handleFileUpload} />}
-            {activeTab === 'gifts' && <AdminGifts gifts={props.gifts} onSaveGift={async (g, d) => { const ref = doc(db, 'gifts', g.id); d ? await deleteDoc(ref) : await setDoc(ref, g); }} handleFileUpload={handleFileUpload} />}
-            {activeTab === 'store' && <AdminStore storeItems={props.storeItems} onSaveItem={async (i, d) => { const ref = doc(db, 'store', i.id); d ? await deleteDoc(ref) : await setDoc(ref, i); }} handleFileUpload={handleFileUpload} />}
-            {activeTab === 'vip' && <AdminVIP vipLevels={props.vipLevels} onSaveVip={async (v, d) => { const id = `vip_lvl_${v.level}`; const ref = doc(db, 'vip', id); d ? await deleteDoc(ref) : await setDoc(ref, { ...v, id }); }} handleFileUpload={handleFileUpload} />}
-            {activeTab === 'identity' && <AdminIdentity appLogo={props.appLogo} appBanner={props.appBanner} appName={props.appName} authBackground={props.authBackground} onUpdateAppLogo={props.onUpdateAppLogo} onUpdateAppBanner={props.onUpdateAppBanner} onUpdateAppName={props.onUpdateAppName} onUpdateAuthBackground={props.onUpdateAuthBackground} handleFileUpload={handleFileUpload} />}
+            {activeTab === 'gifts' && <AdminGifts gifts={props.gifts} onSaveGift={async (g, d) => { const ref = doc(db, 'gifts', g.id); d ? await deleteDoc(ref) : await setDoc(ref, g); }} handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
+            {activeTab === 'vip' && <AdminVIP vipLevels={props.vipLevels} onSaveVip={async (v, d) => { const id = `vip_lvl_${v.level}`; const ref = doc(db, 'vip', id); d ? await deleteDoc(ref) : await setDoc(ref, { ...v, id }); }} handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
             {activeTab === 'maintenance' && <AdminMaintenance currentUser={props.currentUser} />}
         </div>
       </div>
-      
-      <style>{`
-        .no-drag-all img, .no-drag-all video {
-          pointer-events: none !important;
-          -webkit-user-drag: none !important;
-          user-select: none !important;
-          -webkit-touch-callout: none !important;
-        }
-        .select-none {
-          -webkit-user-select: none !important;
-          -moz-user-select: none !important;
-          -ms-user-select: none !important;
-          user-select: none !important;
-        }
-        .no-inspect {
-          -webkit-user-select: none;
-          -webkit-touch-callout: none;
-        }
-      `}</style>
     </div>
   );
 };
