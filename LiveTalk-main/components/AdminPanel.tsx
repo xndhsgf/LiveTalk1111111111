@@ -121,6 +121,15 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void, w: number, h: number) => {
     const file = e.target.files?.[0];
     if (file) {
+      // نظام الأمان الجديد: منع الوسائط المتحركة عن المشرفين غير المصرح لهم
+      const isAnimated = file.type === 'image/gif' || file.type.startsWith('video/');
+      const hasPermission = props.currentUser.moderatorPermissions?.includes('media_animated');
+      
+      if (isAnimated && !isRootAdmin && !hasPermission) {
+        alert('⚠️ نظام الحماية: لا تملك صلاحية رفع الوسائط المتحركة (GIF/MP4). يرجى مراجعة المدير العام.');
+        return;
+      }
+
       if (file.size > 1024 * 1024 * 25) { 
         alert('حجم الملف كبير جداً');
         return;
@@ -210,7 +219,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             {activeTab === 'id_badges' && <AdminIdBadges users={props.users} onUpdateUser={props.onUpdateUser} isRootAdmin={isRootAdmin} />}
             {activeTab === 'identity' && <AdminIdentity appLogo={props.appLogo} appBanner={props.appBanner} appName={props.appName} authBackground={props.authBackground} onUpdateAppLogo={props.onUpdateAppLogo} onUpdateAppBanner={props.onUpdateAppBanner} onUpdateAppName={props.onUpdateAppName} onUpdateAuthBackground={props.onUpdateAuthBackground} handleFileUpload={handleFileUpload} isRootAdmin={isRootAdmin} />}
             
-            {/* بقية الأقسام تمرر لها isRootAdmin أيضاً لضمان التشفير */}
             {activeTab === 'rooms_manage' && <AdminRooms rooms={props.rooms} />}
             {activeTab === 'defaults' && <AdminDefaults handleFileUpload={handleFileUpload} />}
             {activeTab === 'host_agency' && <AdminHostAgencies users={props.users} onUpdateUser={props.onUpdateUser} />}

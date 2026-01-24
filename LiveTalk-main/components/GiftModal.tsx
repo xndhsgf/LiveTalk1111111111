@@ -45,7 +45,7 @@ const GiftModal: React.FC<GiftModalProps> = ({
 
   const isVideoUrl = (url: string) => {
     if (!url) return false;
-    return url.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || url.includes('video');
+    return url.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || url.includes('video/mp4') || url.includes('data:video');
   };
 
   const toggleRecipient = (id: string) => {
@@ -72,9 +72,11 @@ const GiftModal: React.FC<GiftModalProps> = ({
     
     if (isVideoUrl(iconUrl)) {
       return (
-        <div className="relative w-full h-full flex items-center justify-center">
-           <Video size={32} className="text-pink-500 opacity-40 absolute z-0" />
-           <video src={iconUrl} muted className="w-full h-full object-contain relative z-10" />
+        <div className="relative w-full h-full flex items-center justify-center bg-black/40 rounded-lg overflow-hidden">
+           <video src={iconUrl} muted loop autoPlay playsInline className="w-full h-full object-contain relative z-10" />
+           <div className="absolute top-0.5 right-0.5 bg-black/60 p-0.5 rounded shadow">
+             <Video size={8} className="text-white opacity-60" />
+           </div>
         </div>
       );
     }

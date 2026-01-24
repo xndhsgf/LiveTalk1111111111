@@ -16,7 +16,7 @@ import ComboButton from './ComboButton';
 import ControlBar from './ControlBar';
 import ReactionPicker from './ReactionPicker';
 import GiftModal from '../GiftModal';
-import RoomSettingsModal from '../RoomSettingsModal';
+import RoomSettingsModal from './RoomSettingsModal';
 import RoomRankModal from '../RoomRankModal';
 import RoomToolsModal from './RoomToolsModal'; 
 import LuckyBagModal from '../LuckyBagModal';
@@ -32,7 +32,6 @@ import WinStrip from '../WinStrip';
 import EditProfileModal from '../EditProfileModal';
 import { AnimatePresence, motion } from 'framer-motion';
 
-// دالة الحساب الفورية للمستوى
 const calculateLiveLvl = (pts: number) => {
   if (!pts || pts <= 0) return 1;
   const l = Math.floor(Math.sqrt(pts / 50000)); 
@@ -44,9 +43,7 @@ const ChatLevelBadge: React.FC<{ level: number; type: 'wealth' | 'recharge' }> =
   return (
     <div className="relative h-[20px] min-w-[65px] flex items-center pr-3 group cursor-default shrink-0">
       <div className={`absolute inset-0 right-3 rounded-l-md border border-amber-500/60 shadow-lg ${
-        isWealth 
-          ? 'bg-gradient-to-r from-[#6a29e3] to-[#8b5cf6]' 
-          : 'bg-[#121212]'
+        isWealth ? 'bg-gradient-to-r from-[#6a29e3] to-[#8b5cf6]' : 'bg-[#121212]'
       }`}>
         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]"></div>
       </div>
@@ -86,23 +83,21 @@ const VoiceRoom: React.FC<any> = ({
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [selectedUserForProfile, setSelectedUserForProfile] = useState<User | null>(null);
-  const [micSkins, setMicSkins] = useState<Record<number, string>>({});
+  const [micSkins, setMicSkins] = useState<Record<string, string>>({});
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
   
   const [isGiftActive, setIsGiftActive] = useState(false);
   const [isEntryActive, setIsEntryActive] = useState(false);
   
-  const [sessionStartTime] = useState<number>(Date.now());
+  const [joinTime] = useState<number>(Date.now());
   const [localSpeakers, setLocalSpeakers] = useState<any[]>(initialRoom.speakers || []);
   const [localMicCount, setLocalMicCount] = useState<number>(Number(initialRoom.micCount || 8));
   const [comboState, setComboState] = useState<{gift: Gift, recipients: string[], count: number} | null>(null);
   const [luckyWinAmount, setLuckyWinAmount] = useState<number>(0); 
-  
   const [activeListeners, setActiveListeners] = useState<User[]>([]);
   
-  const comboExpireTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emojiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasSentEntryRef = useRef<boolean>(false); 
+  const comboTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRoomSpeakers = useRef<any[] | null>(null);
   const roomSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const giftAnimRef = useRef<any>(null);
@@ -110,12 +105,138 @@ const VoiceRoom: React.FC<any> = ({
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const isHost = room.hostId === currentUser.id;
-  const isHeaderVisible = true;
 
-  // --- ربط Agora Voice مع معالجة الأخطاء والدورة الحياتية ---
+  // إغلاق زر الكومبو تلقائياً بعد 5 ثوانٍ من التوقف
+  const resetComboTimer = useCallback(() => {
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    comboTimerRef.current = setTimeout(() => {
+      setComboState(null);
+    }, 5000);
+  }, []);
+
+  // --- دوال نظام الهدايا الموحد ---
+  const processGiftAction = useCallback(async (gift: Gift, recipients: string[], qty: number = 1, isFromCombo: boolean = false) => {
+    const totalCost = gift.cost * qty * recipients.length;
+    if (Number(currentUser.coins || 0) < totalCost) return alert('رصيدك لا يكفي!');
+
+    // 1. حساب فوز الحظ لكل ضربة/إرسال
+    let winAmount = 0;
+    if (gift.category === 'lucky') {
+      const winRate = gameSettings.luckyGiftWinRate || 30;
+      const isWin = (Math.random() * 100) < winRate;
+      if (isWin && gameSettings.luckyMultipliers?.length > 0) {
+        const totalChance = gameSettings.luckyMultipliers.reduce((s, m) => s + m.chance, 0);
+        let r = Math.random() * totalChance;
+        let picked = gameSettings.luckyMultipliers[0];
+        for (const m of gameSettings.luckyMultipliers) { if (r < m.chance) { picked = m; break; } r -= m.chance; }
+        winAmount = gift.cost * qty * picked.value;
+      }
+    }
+
+    // 2. تحديث الحالة المحلية (Optimistic Update)
+    onUpdateUser({ 
+      coins: Number(currentUser.coins) - totalCost + winAmount, 
+      wealth: Number(currentUser.wealth || 0) + totalCost 
+    });
+
+    const valPerRecipient = gift.cost * qty;
+    const updatedSpeakers = localSpeakers.map((s: any) => 
+      recipients.includes(s.id) ? { ...s, charm: (Number(s.charm) || 0) + valPerRecipient } : s
+    );
+    setLocalSpeakers(updatedSpeakers);
+
+    if (winAmount > 0) {
+      setLuckyWinAmount(0); // تصفير سريع لضمان إعادة تشغيل الشريط
+      setTimeout(() => setLuckyWinAmount(winAmount), 50);
+      setTimeout(() => setLuckyWinAmount(0), 5000);
+    }
+
+    // 3. تشغيل الأنميشن البصري
+    if (giftAnimRef.current) {
+      giftAnimRef.current.trigger({
+        id: 'gift-' + Date.now() + '-' + Math.random(),
+        giftId: gift.id,
+        giftName: gift.name,
+        giftIcon: gift.icon,
+        giftAnimation: gift.animationType || 'pop',
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        recipientIds: recipients,
+        quantity: qty,
+        duration: gift.duration || 5,
+        displaySize: gift.displaySize || 'medium',
+        timestamp: Timestamp.now()
+      });
+    }
+
+    // 4. العمليات على قاعدة البيانات
+    try {
+      const batch = writeBatch(db);
+      const userRef = doc(db, 'users', currentUser.id);
+      batch.update(userRef, { coins: increment(-totalCost + winAmount), wealth: increment(totalCost) });
+      
+      recipients.forEach(rid => {
+        batch.update(doc(db, 'users', rid), { charm: increment(valPerRecipient), diamonds: increment(valPerRecipient * 0.7) });
+        batch.set(doc(db, 'rooms', initialRoom.id, 'contributors', currentUser.id), { 
+          userId: currentUser.id, name: currentUser.name, avatar: currentUser.avatar, amount: increment(valPerRecipient) 
+        }, { merge: true });
+      });
+
+      // تسجيل حدث الهدية للآخرين في الغرفة
+      batch.set(doc(collection(db, 'rooms', initialRoom.id, 'gift_events')), {
+        giftId: gift.id, giftName: gift.name, giftIcon: gift.icon, giftAnimation: gift.animationType || 'pop',
+        senderId: currentUser.id, senderName: currentUser.name, recipientIds: recipients, quantity: qty,
+        duration: gift.duration || 5, displaySize: gift.displaySize || 'medium', timestamp: serverTimestamp()
+      });
+
+      // إضافة رسالة للدردشة
+      batch.set(doc(collection(db, 'rooms', initialRoom.id, 'messages')), {
+        userId: currentUser.id, userName: currentUser.name, 
+        userWealthLevel: calculateLiveLvl(Number(currentUser.wealth || 0) + totalCost),
+        userRechargeLevel: calculateLiveLvl(Number(currentUser.rechargePoints || 0)),
+        content: winAmount > 0 ? `أرسل ${gift.name} x${qty} وفاز بـ ${winAmount.toLocaleString()} 🪙!` : `أرسل ${gift.name} x${qty} 🎁`,
+        type: 'gift', isLuckyWin: winAmount > 0, timestamp: serverTimestamp()
+      });
+
+      await batch.commit();
+      queueRoomSpeakersUpdate(updatedSpeakers);
+
+      // تفعيل زر الضرب المتكرر (Combo) وإعادة تشغيل العداد
+      if (!isFromCombo) {
+        setComboState({ gift, recipients: [...recipients], count: qty });
+      } else {
+        setComboState(prev => prev ? { ...prev, count: prev.count + qty } : null);
+      }
+      resetComboTimer();
+
+    } catch (e) {
+      console.error("Gift processing error:", e);
+    }
+  }, [currentUser, localSpeakers, initialRoom.id, gameSettings, onUpdateUser, resetComboTimer]);
+
+  const handleSendGift = (gift: Gift, quantity: number) => {
+    if (selectedRecipientIds.length === 0) return alert('اختر مستلماً أولاً');
+    setShowGifts(false);
+    processGiftAction(gift, selectedRecipientIds, quantity);
+  };
+
+  const handleComboHit = () => {
+    if (!comboState) return;
+    processGiftAction(comboState.gift, comboState.recipients, 1, true);
+  };
+
+  // --- بقية الـ Effects ---
+
+  useEffect(() => {
+    const unsubSkins = onSnapshot(doc(db, 'appSettings', 'micSkins'), (snap) => {
+      if (snap.exists()) setMicSkins(snap.data());
+    });
+    return () => unsubSkins();
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
-
     const connect = async () => {
       try {
         await agoraService.join(initialRoom.id, currentUser.id);
@@ -124,31 +245,19 @@ const VoiceRoom: React.FC<any> = ({
           if (onMic) await agoraService.publishAudio();
           await agoraService.setMute(isMuted);
         }
-      } catch (err) {
-        // تجاهل الخطأ في الكونسول إذا كان بسبب تنقل سريع
-      }
+      } catch (err) {}
     };
-
     connect();
-
-    return () => {
-      isMounted = false;
-      agoraService.leave();
-    };
+    return () => { isMounted = false; agoraService.leave(); };
   }, [initialRoom.id, currentUser.id]);
 
-  useEffect(() => {
-    agoraService.setMute(isMuted);
-  }, [isMuted]);
+  useEffect(() => { agoraService.setMute(isMuted); }, [isMuted]);
 
   useEffect(() => {
     const onMic = localSpeakers.some(s => s.id === currentUser.id);
-    if (onMic) {
-      agoraService.publishAudio();
-    } else {
-      agoraService.unpublishAudio();
-    }
-  }, [localSpeakers.length]); // نعتمد على طول المصفوفة للكشف عن الصعود والنزول
+    if (onMic) agoraService.publishAudio();
+    else agoraService.unpublishAudio();
+  }, [localSpeakers.length]);
 
   useEffect(() => {
     const listenerRef = doc(db, 'rooms', initialRoom.id, 'active_listeners', currentUser.id);
@@ -167,13 +276,6 @@ const VoiceRoom: React.FC<any> = ({
   }, [initialRoom.id, isHost]);
 
   useEffect(() => {
-     if (!hasSentEntryRef.current && currentUser.activeEntry && currentUser.activeEntry !== '') {
-        hasSentEntryRef.current = true;
-        addDoc(collection(db, 'rooms', initialRoom.id, 'entry_events'), { userId: currentUser.id, userName: currentUser.name, videoUrl: currentUser.activeEntry, timestamp: serverTimestamp() }).catch(() => { hasSentEntryRef.current = false; });
-     }
-  }, [initialRoom.id, currentUser.id, currentUser.activeEntry]);
-
-  useEffect(() => {
     const unsubRoom = onSnapshot(doc(db, 'rooms', initialRoom.id), (snap) => {
       if (snap.exists()) {
         const roomData = { id: snap.id, ...snap.data() } as Room;
@@ -185,8 +287,31 @@ const VoiceRoom: React.FC<any> = ({
     return () => unsubRoom();
   }, [initialRoom.id]);
 
+  useEffect(() => {
+    const q = query(collection(db, 'rooms', initialRoom.id, 'messages'), orderBy('timestamp', 'desc'), limit(50));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any))
+        .filter(m => !m.timestamp || m.timestamp.toMillis() > joinTime).reverse();
+      setMessages(msgs);
+    });
+    return () => unsubscribe();
+  }, [initialRoom.id, joinTime]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'lucky_bags'), where('roomId', '==', initialRoom.id));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const now = Date.now();
+      const bags = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LuckyBag))
+        .filter(bag => (Number(bag.remainingAmount) || 0) > 0 && bag.expiresAt?.toMillis() > now);
+      setActiveBags(bags);
+    });
+    return () => unsubscribe();
+  }, [initialRoom.id]);
+
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
   const queueRoomSpeakersUpdate = useCallback((updatedSpeakers: any[], updatedMicCount?: number) => {
-    pendingRoomSpeakers.current = (updatedSpeakers || []).map(s => ({ id: s.id || '', customId: s.customId || null, name: s.name || 'مستخدم', avatar: s.avatar || '', seatIndex: Number(s.seatIndex) ?? 0, isMuted: !!s.isMuted, charm: Number(s.charm || 0), activeEmoji: s.activeEmoji || null, frame: s.frame || null }));
+    pendingRoomSpeakers.current = updatedSpeakers.map(s => ({ id: s.id, customId: s.customId, name: s.name, avatar: s.avatar, seatIndex: s.seatIndex, isMuted: !!s.isMuted, charm: Number(s.charm || 0), activeEmoji: s.activeEmoji || null, frame: s.frame || null }));
     const mCount = updatedMicCount || localMicCount;
     if (roomSyncTimerRef.current) clearTimeout(roomSyncTimerRef.current);
     roomSyncTimerRef.current = setTimeout(async () => {
@@ -198,84 +323,28 @@ const VoiceRoom: React.FC<any> = ({
     }, 2500); 
   }, [initialRoom.id, localMicCount]);
 
-  useEffect(() => {
-    const q = query(collection(db, 'lucky_bags'), where('roomId', '==', initialRoom.id));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const now = Date.now();
-      const bags = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LuckyBag)).filter(bag => (bag.expiresAt?.toMillis ? bag.expiresAt.toMillis() : 0) > now);
-      setActiveBags(bags);
-    });
-    return () => unsub();
-  }, [initialRoom.id]);
-
-  useEffect(() => {
-    const messagesRef = collection(db, 'rooms', initialRoom.id, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'desc'), limit(50));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter((msg: any) => (msg.timestamp?.toMillis ? msg.timestamp.toMillis() : Date.now()) >= sessionStartTime);
-      setMessages(msgs.reverse());
-      setTimeout(() => { if (messagesEndRef.current && chatContainerRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' }); }, 100);
-    });
-    return () => unsubscribe();
-  }, [initialRoom.id, sessionStartTime]);
-
-  const handleSendGift = (gift: Gift, quantity: number) => {
-    if (selectedRecipientIds.length === 0) return alert('اختر مستلماً أولاً');
-    setShowGifts(false);
-    const totalCost = gift.cost * quantity * selectedRecipientIds.length;
-    if (Number(currentUser.coins || 0) < totalCost) return alert('رصيدك لا يكفي!');
-    
-    if (giftAnimRef.current) {
-      giftAnimRef.current.trigger({ id: 'local-' + Date.now(), giftId: gift.id, giftName: gift.name, giftIcon: gift.icon, giftAnimation: gift.animationType || 'pop', senderId: currentUser.id, senderName: currentUser.name, senderAvatar: currentUser.avatar, recipientIds: selectedRecipientIds, quantity, duration: gift.duration || 5, displaySize: gift.displaySize || 'medium', timestamp: Timestamp.now() });
-    }
-
-    let winAmount = 0;
-    if (gift.category === 'lucky') {
-      const isWin = (Math.random() * 100) < (gameSettings.luckyGiftWinRate || 30);
-      if (isWin && gameSettings.luckyMultipliers?.length > 0) {
-        const totalChance = gameSettings.luckyMultipliers.reduce((s, m) => s + m.chance, 0);
-        let r = Math.random() * totalChance;
-        let picked = gameSettings.luckyMultipliers[0];
-        for (const m of gameSettings.luckyMultipliers) { if (r < m.chance) { picked = m; break; } r -= m.chance; }
-        winAmount = gift.cost * quantity * picked.value;
-      }
-    }
-    
-    onUpdateUser({ coins: Number(currentUser.coins) - totalCost + winAmount, wealth: Number(currentUser.wealth || 0) + totalCost });
-    const updatedSpeakers = localSpeakers.map((s: any) => selectedRecipientIds.includes(s.id) ? { ...s, charm: (Number(s.charm) || 0) + (gift.cost * quantity) } : s);
-    setLocalSpeakers(updatedSpeakers);
-    if (winAmount > 0) { setLuckyWinAmount(winAmount); setTimeout(() => setLuckyWinAmount(0), 6000); }
-    
-    const batch = writeBatch(db);
-    batch.update(doc(db, 'users', currentUser.id), { coins: increment(-totalCost + winAmount), wealth: increment(totalCost) });
-    selectedRecipientIds.forEach(rid => {
-      const val = gift.cost * quantity;
-      batch.update(doc(db, 'users', rid), { charm: increment(val), diamonds: increment(val * 0.7) });
-      batch.set(doc(db, 'rooms', initialRoom.id, 'contributors', currentUser.id), { userId: currentUser.id, name: currentUser.name, avatar: currentUser.avatar, amount: increment(val) }, { merge: true });
-    });
-    batch.set(doc(collection(db, 'rooms', initialRoom.id, 'gift_events')), { giftId: gift.id, giftName: gift.name, giftIcon: gift.icon, giftAnimation: gift.animationType || 'pop', senderId: currentUser.id, senderName: currentUser.name, recipientIds: selectedRecipientIds, quantity, duration: gift.duration || 5, displaySize: gift.displaySize || 'medium', timestamp: serverTimestamp() });
-    batch.set(doc(collection(db, 'rooms', initialRoom.id, 'messages')), { userId: currentUser.id, userName: currentUser.name, userWealthLevel: calculateLiveLvl(Number(currentUser.wealth || 0) + totalCost), userRechargeLevel: calculateLiveLvl(Number(currentUser.rechargePoints || 0)), content: winAmount > 0 ? `أرسل ${gift.name} x${quantity} وفاز بـ ${winAmount.toLocaleString()} 🪙!` : `أرسل ${gift.name} x${quantity} 🎁`, type: 'gift', isLuckyWin: winAmount > 0, timestamp: serverTimestamp() });
-    batch.commit();
-    queueRoomSpeakersUpdate(updatedSpeakers);
-    setComboState({ gift, recipients: [...selectedRecipientIds], count: quantity });
-  };
-
-  const handleSendMessage = (text: string) => {
-    if (!text.trim()) return;
-    addDoc(collection(db, 'rooms', initialRoom.id, 'messages'), { userId: currentUser.id, userName: currentUser.name, userWealthLevel: calculateLiveLvl(Number(currentUser.wealth || 0)), userRechargeLevel: calculateLiveLvl(Number(currentUser.rechargePoints || 0)), userAchievements: currentUser.achievements || [], userBubble: currentUser.activeBubble || null, userVip: currentUser.isVip || false, content: text, type: 'text', timestamp: serverTimestamp() });
-  };
-
   const handleSeatClick = (index: number) => {
     const s = localSpeakers.find(s => s.seatIndex === index);
     if (s) { setSelectedUserForProfile(s); setShowProfileSheet(true); }
     else {
       const updated = [...localSpeakers.filter(s => s.id !== currentUser.id), { id: currentUser.id, customId: currentUser.customId, name: currentUser.name, avatar: currentUser.avatar, seatIndex: index, isMuted, charm: (localSpeakers.find(s => s.id === currentUser.id)?.charm || 0), activeEmoji: null, frame: currentUser.frame || null }];
-      setLocalSpeakers(updated);
-      queueRoomSpeakersUpdate(updated);
+      setLocalSpeakers(updated); queueRoomSpeakersUpdate(updated);
     }
   };
 
-  const handleToolAction = (action: string) => {
+  const renderSeatsLayout = () => {
+    let gridCols = localMicCount >= 10 ? "grid-cols-5" : "grid-cols-4";
+    let seatSize = localMicCount === 8 ? "w-[72px] h-[72px]" : localMicCount === 10 ? "w-[64px] h-[64px]" : localMicCount === 15 ? "w-[56px] h-[56px]" : "w-[50px] h-[50px]";
+    return (
+      <div className={`grid ${gridCols} gap-x-3 gap-y-12 w-full max-w-[95%] mx-auto justify-items-center items-center overflow-visible py-6`}>
+        {Array.from({ length: localMicCount }).map((_, i) => (
+          <Seat key={i} index={i} speaker={localSpeakers.find(s => s.seatIndex === i) || null} isHost={localSpeakers.find(s => s.seatIndex === i)?.id === room.hostId} currentUser={currentUser} sizeClass={seatSize} customSkin={micSkins[localMicCount.toString()]} onClick={() => handleSeatClick(i)} />
+        ))}
+      </div>
+    );
+  };
+
+  const handleToolAction = async (action: string) => {
     setShowTools(false);
     switch (action) {
       case 'settings': setShowSettings(true); break;
@@ -283,43 +352,40 @@ const VoiceRoom: React.FC<any> = ({
       case 'luckybag': setShowLuckyBag(true); break;
       case 'mic_layout':
         const nextCount = localMicCount === 8 ? 10 : localMicCount === 10 ? 15 : localMicCount === 15 ? 20 : 8;
-        setLocalMicCount(nextCount);
-        queueRoomSpeakersUpdate(localSpeakers, nextCount);
+        setLocalMicCount(nextCount); queueRoomSpeakersUpdate(localSpeakers, nextCount);
         break;
       case 'reset_charm':
-        if (confirm('هل تريد تصفير كاريزما الجميع؟')) {
-          const updated = localSpeakers.map(s => ({ ...s, charm: 0 }));
-          setLocalSpeakers(updated);
-          queueRoomSpeakersUpdate(updated);
-        }
+        if (confirm('تصفير كاريزما الجميع؟')) { const updated = localSpeakers.map(s => ({ ...s, charm: 0 })); setLocalSpeakers(updated); queueRoomSpeakersUpdate(updated); }
         break;
       case 'clear_chat':
-        setMessages([]);
+        if (confirm('هل تريد مسح جميع رسائل الدردشة نهائياً؟')) {
+           try {
+             const qSnap = await getDocs(collection(db, 'rooms', initialRoom.id, 'messages'));
+             const batch = writeBatch(db);
+             qSnap.forEach(d => batch.delete(d.ref));
+             await batch.commit(); setMessages([]);
+           } catch (e) {}
+        }
         break;
     }
   };
 
   const handleSendLuckyBag = async (amount: number, recipients: number) => {
-    if (currentUser.coins < amount) return alert('رصيدك لا يكفي');
-    const bagId = 'bag_' + Date.now();
-    const expiresAt = new Date(Date.now() + 5 * 60000);
-    await setDoc(doc(db, 'lucky_bags', bagId), { id: bagId, senderId: currentUser.id, senderName: currentUser.name, senderAvatar: currentUser.avatar, roomId: initialRoom.id, roomTitle: room.title, totalAmount: amount, remainingAmount: amount, recipientsLimit: recipients, claimedBy: [], createdAt: serverTimestamp(), expiresAt: Timestamp.fromDate(expiresAt) });
-    onUpdateUser({ coins: currentUser.coins - amount, wealth: (currentUser.wealth || 0) + amount });
+    if (Number(currentUser.coins) < amount) return alert('رصيدك لا يكفي');
+    setShowLuckyBag(false);
+    try {
+      const batch = writeBatch(db);
+      const bagId = 'bag_' + Date.now() + '_' + currentUser.id;
+      batch.set(doc(db, 'lucky_bags', bagId), { senderId: currentUser.id, senderName: currentUser.name, senderAvatar: currentUser.avatar, roomId: initialRoom.id, roomTitle: room.title, totalAmount: amount, remainingAmount: amount, recipientsLimit: recipients, claimedBy: [], createdAt: serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 5*60*1000) });
+      batch.update(doc(db, 'users', currentUser.id), { coins: increment(-amount), wealth: increment(amount) });
+      batch.set(doc(collection(db, 'rooms', initialRoom.id, 'messages')), { userId: currentUser.id, userName: currentUser.name, userWealthLevel: calculateLiveLvl(Number(currentUser.wealth || 0) + amount), userRechargeLevel: calculateLiveLvl(Number(currentUser.rechargePoints || 0)), content: `أرسل حقيبة حظ بقيمة ${amount.toLocaleString()} 🪙!`, type: 'text', timestamp: serverTimestamp() });
+      await batch.commit(); onUpdateUser({ coins: Number(currentUser.coins) - amount, wealth: Number(currentUser.wealth || 0) + amount });
+    } catch (e) {}
   };
 
-  const handleLeaveMic = () => {
-    const updated = localSpeakers.filter(s => s.id !== currentUser.id);
-    setLocalSpeakers(updated);
-    queueRoomSpeakersUpdate(updated);
-  };
-
-  const renderSeatsLayout = () => {
-    const sz = localMicCount === 20 ? 'w-11 h-11' : localMicCount === 15 ? 'w-[52px] h-[52px]' : 'w-[72px] h-[72px]';
-    return (
-      <div className={`grid ${localMicCount === 10 ? 'grid-cols-4' : localMicCount >= 15 ? 'grid-cols-5' : 'grid-cols-4'} gap-x-4 gap-y-12 w-full max-w-sm mx-auto justify-items-center items-center overflow-visible`}>
-        {Array.from({ length: localMicCount }).map((_, i) => (<Seat key={i} index={i} speaker={localSpeakers.find(s => s.seatIndex === i) || null} isHost={localSpeakers.find(s => s.seatIndex === i)?.id === room.hostId} currentUser={currentUser} sizeClass={sz} customSkin={micSkins[localMicCount]} onClick={() => handleSeatClick(i)} />))}
-      </div>
-    );
+  const handleSendMessage = (text: string) => {
+    if (!text.trim()) return;
+    addDoc(collection(db, 'rooms', initialRoom.id, 'messages'), { userId: currentUser.id, userName: currentUser.name, userWealthLevel: calculateLiveLvl(Number(currentUser.wealth || 0)), userRechargeLevel: calculateLiveLvl(Number(currentUser.rechargePoints || 0)), userAchievements: currentUser.achievements || [], userBubble: currentUser.activeBubble || null, userVip: currentUser.isVip || false, content: text, type: 'text', timestamp: serverTimestamp() });
   };
 
   return (
@@ -327,13 +393,14 @@ const VoiceRoom: React.FC<any> = ({
       <RoomBackground background={room.background} />
       <GiftAnimationLayer ref={giftAnimRef} roomId={initialRoom.id} speakers={localSpeakers} currentUserId={currentUser.id} onActiveChange={setIsGiftActive} />
       <EntryAnimationLayer roomId={initialRoom.id} currentUserId={currentUser.id} onActiveChange={setIsEntryActive} />
-      <RoomHeader room={room} onLeave={onLeave} onMinimize={onMinimize} onShowMembers={() => setShowMembers(true)} isVisible={isHeaderVisible} listenerCount={activeListeners.length} />
+      <RoomHeader room={room} onLeave={onLeave} onMinimize={onMinimize} onShowMembers={() => setShowMembers(true)} isVisible={true} listenerCount={activeListeners.length} />
       <AnimatePresence>
-        {luckyWinAmount > 0 && <WinStrip amount={luckyWinAmount} />}
+        {luckyWinAmount > 0 && <WinStrip key={`win-${luckyWinAmount}`} amount={luckyWinAmount} />}
         {activeBags.map(bag => (<LuckyBagActive key={bag.id} bag={bag as any} isClaimed={bag.claimedBy.includes(currentUser.id)} onClaim={() => {
            const share = Math.floor(bag.totalAmount / bag.recipientsLimit);
            onUpdateUser({ coins: currentUser.coins + share });
-           setLuckyWinAmount(share); setTimeout(() => setLuckyWinAmount(0), 4000);
+           setLuckyWinAmount(0); setTimeout(() => setLuckyWinAmount(share), 50);
+           setTimeout(() => setLuckyWinAmount(0), 4000);
            updateDoc(doc(db, 'lucky_bags', bag.id), { remainingAmount: increment(-share), claimedBy: arrayUnion(currentUser.id) });
         }} />))}
       </AnimatePresence>
@@ -360,7 +427,16 @@ const VoiceRoom: React.FC<any> = ({
               <div ref={messagesEndRef} />
            </div>
         </div>
-        <AnimatePresence>{comboState && <ComboButton gift={comboState.gift} count={comboState.count} onHit={() => { setComboState(p => p ? { ...p, count: p.count + 1 } : null); const giftValue = comboState.gift.cost; onUpdateUser({ coins: Number(currentUser.coins) - giftValue, wealth: Number(currentUser.wealth || 0) + giftValue }); setLocalSpeakers(localSpeakers.map(s => comboState.recipients.includes(s.id) ? { ...s, charm: (Number(s.charm) || 0) + giftValue } : s)); }} duration={5000} />}</AnimatePresence>
+        <AnimatePresence>
+          {comboState && (
+            <ComboButton 
+              gift={comboState.gift} 
+              count={comboState.count} 
+              onHit={handleComboHit} 
+              duration={4000} 
+            />
+          )}
+        </AnimatePresence>
         <ControlBar isMuted={isMuted} onToggleMute={onToggleMute} onShowGifts={() => setShowGifts(true)} onShowGames={() => setShowGameCenter(true)} onShowRoomTools={() => setShowTools(true)} onSendMessage={handleSendMessage} onShowEmojis={() => setShowEmojis(true)} userCoins={Number(currentUser.coins)} />
       </div>
       <ReactionPicker isOpen={showEmojis} emojis={gameSettings.availableEmojis} onSelect={(emoji) => {
@@ -378,7 +454,7 @@ const VoiceRoom: React.FC<any> = ({
       }} onClose={() => setShowEmojis(false)} />
       <GiftModal isOpen={showGifts} onClose={() => setShowGifts(false)} gifts={gifts} userCoins={Number(currentUser.coins)} speakers={localSpeakers} selectedRecipientIds={selectedRecipientIds} onSelectRecipient={setSelectedRecipientIds} onSend={handleSendGift} categoryLabels={giftCategoryLabels} />
       <RoomToolsModal isOpen={showTools} onClose={() => setShowTools(false)} isHost={isHost} onAction={handleToolAction} />
-      {showSettings && <RoomSettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} room={room} onUpdate={onUpdateRoom} />}
+      {showSettings && <RoomSettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} room={room} onUpdate={onUpdateRoom} currentUser={currentUser} />}
       {showRank && <RoomRankModal isOpen={showRank} onClose={() => setShowRank(false)} roomId={initialRoom.id} roomTitle={room.title} />}
       {showMembers && <RoomMembersModal isOpen={showMembers} onClose={() => setShowMembers(false)} room={room} speakers={localSpeakers} listeners={activeListeners} onSelectUser={(u) => { setSelectedUserForProfile(u); setShowProfileSheet(true); }} />}
       {showLuckyBag && <LuckyBagModal isOpen={showLuckyBag} onClose={() => setShowLuckyBag(false)} userCoins={Number(currentUser.coins)} onSend={handleSendLuckyBag} />}
@@ -387,7 +463,7 @@ const VoiceRoom: React.FC<any> = ({
       {activeGame === 'slots' && <SlotsGameModal isOpen={activeGame === 'slots'} onClose={() => setActiveGame(null)} userCoins={Number(currentUser.coins)} onUpdateCoins={(c) => onUpdateUser({ coins: c })} winRate={gameSettings.slotsWinRate} gameSettings={gameSettings} />}
       {activeGame === 'lion' && <LionWheelGameModal isOpen={activeGame === 'lion'} onClose={() => setActiveGame(null)} userCoins={Number(currentUser.coins)} onUpdateCoins={(c) => onUpdateUser({ coins: c })} gameSettings={gameSettings} />}
       {selectedExternalGame && <ExternalGameModal isOpen={!!selectedExternalGame} onClose={() => setSelectedExternalGame(null)} game={selectedExternalGame} currentUser={currentUser} onUpdateUser={onUpdateUser} />}
-      <AnimatePresence>{showProfileSheet && selectedUserForProfile && (<UserProfileSheet user={selectedUserForProfile} onClose={() => setShowProfileSheet(false)} isCurrentUser={selectedUserForProfile.id === currentUser.id} onAction={(action) => { if (action === 'gift') setShowGifts(true); if (action === 'message') onOpenPrivateChat(selectedUserForProfile); if (action === 'edit') setShowEditProfileModal(true); if (action === 'leaveMic') handleLeaveMic(); }} currentUser={currentUser} allUsers={users} currentRoom={room} />)}</AnimatePresence>
+      <AnimatePresence>{showProfileSheet && selectedUserForProfile && (<UserProfileSheet user={selectedUserForProfile} onClose={() => setShowProfileSheet(false)} isCurrentUser={selectedUserForProfile.id === currentUser.id} onAction={(action) => { if (action === 'gift') setShowGifts(true); if (action === 'message') onOpenPrivateChat(selectedUserForProfile); if (action === 'edit') setShowEditProfileModal(true); if (action === 'leaveMic') { setLocalSpeakers(localSpeakers.filter(s => s.id !== currentUser.id)); queueRoomSpeakersUpdate(localSpeakers.filter(s => s.id !== currentUser.id)); } if (action === 'resetUserCharm') { const updated = localSpeakers.map(s => s.id === selectedUserForProfile.id ? { ...s, charm: 0 } : s); setLocalSpeakers(updated); queueRoomSpeakersUpdate(updated); } }} currentUser={currentUser} allUsers={users} currentRoom={room} />)}</AnimatePresence>
       <AnimatePresence>{showEditProfileModal && <EditProfileModal isOpen={showEditProfileModal} onClose={() => setShowEditProfileModal(false)} currentUser={currentUser} onSave={onUpdateUser} />}</AnimatePresence>
     </div>
   );

@@ -6,7 +6,11 @@ import { X, MessageCircle, Gift, Trophy, Star, Heart, Coins, Copy, ShieldCheck, 
 import { db } from '../services/firebase';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
 
-// دالة حساب المستوى الموحدة للبروفايل
+const isVideoUrl = (url: string) => {
+  if (!url) return false;
+  return url.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || url.includes('video') || url.startsWith('data:video');
+};
+
 const calculateProfileLvl = (pts: number) => {
   if (!pts || pts <= 0) return 1;
   const l = Math.floor(Math.sqrt(pts / 50000)); 
@@ -39,7 +43,6 @@ const ProfileLevelBadge: React.FC<{ level: number; type: 'wealth' | 'recharge' }
   );
 };
 
-// Define UserProfileSheetProps interface
 interface UserProfileSheetProps {
   user: User;
   onClose: () => void;
@@ -63,12 +66,10 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
   const isModerator = currentRoom.moderators?.includes(currentUser.id);
   const canManage = (isHost || isModerator) && !isCurrentUser;
 
-  // التحقق هل المستخدم حالياً على المايك
   const isOnMic = useMemo(() => {
     return (currentRoom.speakers || []).some(s => s.id === user.id);
   }, [currentRoom.speakers, user.id]);
 
-  // حساب المستويات حياً من البيانات الخام
   const wealthLvl = calculateProfileLvl(Number(user.wealth || 0));
   const rechargeLvl = calculateProfileLvl(Number(user.rechargePoints || 0));
 
@@ -90,7 +91,6 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
         className="relative w-full max-w-md bg-[#030816] rounded-t-[3rem] border-t border-white/10 shadow-[0_-20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden h-[70vh]"
         dir="rtl"
       >
-        {/* Background Cover */}
         <div className="absolute inset-0 z-0">
           {user.cover ? (
             <img src={user.cover} className="w-full h-full object-cover opacity-40" alt="background" />
@@ -100,7 +100,6 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
           <div className="absolute inset-0 bg-gradient-to-t from-[#030816] via-[#030816]/70 to-black/20"></div>
         </div>
 
-        {/* Top Header Buttons */}
         <div className="relative z-20 h-32 w-full shrink-0">
           <div className="absolute top-6 right-6 flex items-center gap-2">
              <button onClick={onClose} className="p-2 bg-black/40 backdrop-blur-md rounded-full text-white/70 hover:text-white border border-white/10 transition-all">
@@ -119,11 +118,14 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
              )}
           </div>
 
-          {/* User Avatar with Prominent Frame */}
           <div className="absolute bottom-0 left-8">
             <div className="relative w-20 h-20 flex items-center justify-center">
-              <div className="w-[82%] h-[82%] rounded-full border-4 border-[#030816] overflow-hidden bg-slate-800 shadow-2xl relative z-10">
-                <img src={user.avatar} className="w-full h-full object-cover" alt="avatar" />
+              <div className="w-[82%] h-[82%] rounded-full border-4 border-[#030816] overflow-hidden bg-slate-800 shadow-2xl relative z-10 flex items-center justify-center">
+                {isVideoUrl(user.avatar) ? (
+                   <video src={user.avatar} autoPlay muted loop playsInline className="w-full h-full object-cover" />
+                ) : (
+                   <img src={user.avatar} className="w-full h-full object-cover" alt="avatar" />
+                )}
               </div>
               {user.frame && (
                 <img 
@@ -136,9 +138,7 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
           </div>
         </div>
 
-        {/* Content Body */}
         <div className="relative z-20 flex-1 px-8 pt-4 pb-10 space-y-5 overflow-y-auto scrollbar-hide">
-          {/* Relationship Status */}
           {user.cpPartner && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
@@ -146,17 +146,20 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
               className="bg-gradient-to-r from-purple-900/40 via-pink-600/30 to-purple-900/40 border border-pink-500/20 rounded-2xl p-2.5 flex items-center justify-center gap-4 shadow-xl backdrop-blur-sm"
             >
               <div className="flex items-center gap-3">
-                <img src={user.avatar} className="w-8 h-8 rounded-full border-2 border-pink-500/40 object-cover" alt="" />
+                <div className="w-8 h-8 rounded-full border-2 border-pink-500/40 overflow-hidden">
+                   {isVideoUrl(user.avatar) ? <video src={user.avatar} autoPlay muted loop playsInline className="w-full h-full object-cover"/> : <img src={user.avatar} className="w-full h-full object-cover"/>}
+                </div>
                 <div className="flex flex-col items-center gap-0.5">
                    <Heart size={14} fill="#ec4899" className="text-pink-500 animate-pulse" />
                    <span className="text-[6px] font-black text-pink-300 uppercase tracking-widest">Sweet Couple</span>
                 </div>
-                <img src={user.cpPartner.avatar} className="w-8 h-8 rounded-full border-2 border-pink-500/40 object-cover shadow-lg" alt="" />
+                <div className="w-8 h-8 rounded-full border-2 border-pink-500/40 overflow-hidden shadow-lg">
+                   {isVideoUrl(user.cpPartner.avatar) ? <video src={user.cpPartner.avatar} autoPlay muted loop playsInline className="w-full h-full object-cover"/> : <img src={user.cpPartner.avatar} className="w-full h-full object-cover"/>}
+                </div>
               </div>
             </motion.div>
           )}
 
-          {/* Name and Levels */}
           <div className="text-right space-y-3">
             <div className="flex items-center justify-start gap-3 flex-wrap flex-row-reverse">
                 <h2 className="text-xl font-black text-white tracking-tight drop-shadow-lg">{user.name}</h2>
@@ -184,7 +187,6 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
             </button>
           </div>
 
-          {/* Medals / Achievements */}
           <div className="pt-1">
              <div className="flex flex-wrap gap-2.5 items-center">
                 {user.achievements && user.achievements.length > 0 ? (
@@ -207,7 +209,6 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
              </div>
           </div>
 
-          {/* Actions */}
           <div className="flex gap-3 pt-2">
              {isCurrentUser ? (
                 <>
@@ -247,7 +248,6 @@ const UserProfileSheet: React.FC<UserProfileSheetProps> = ({ user: initialUser, 
         </div>
       </motion.div>
 
-      {/* Admin Quick Menu */}
       <AnimatePresence>
         {showAdminMenu && (
           <motion.div 

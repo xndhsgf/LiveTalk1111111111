@@ -6,20 +6,16 @@ const APP_ID = "9209e41821f34b4bb3d5bc8391d86cdc";
 class AgoraService {
   private client: IAgoraRTCClient | null = null;
   private localAudioTrack: IMicrophoneAudioTrack | null = null;
-  private isJoined = false;
   private joinInProgress = false;
 
   constructor() {
-    // تقليل مستوى السجلات لتجنب ازدحام الكونسول وتحسين الأداء
     AgoraRTC.setLogLevel(2); 
   }
 
   async init() {
     if (this.client) return;
-    
     this.client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
     
-    // إعداد المستمعين للأصوات البعيدة
     this.client.on("user-published", async (user, mediaType) => {
       if (mediaType === "audio") {
         try {
@@ -39,45 +35,42 @@ class AgoraService {
   }
 
   async join(channelName: string, uid: string) {
-    // منع الانضمام المتكرر إذا كانت هناك عملية جارية أو تم الانضمام بالفعل
-    if (this.isJoined || this.joinInProgress) return;
-    
     await this.init();
     if (!this.client) return;
+
+    // التحقق من الحالة لمنع INVALID_OPERATION
+    const state = this.client.connectionState;
+    if (state === "CONNECTED" || state === "CONNECTING" || this.joinInProgress) {
+      console.log(`[Agora] Join skipped: Current state is ${state}`);
+      return;
+    }
 
     this.joinInProgress = true;
     try {
       await this.client.join(APP_ID, channelName, null, uid);
-      this.isJoined = true;
-      console.log(`[Agora] Joined channel: ${channelName}`);
+      console.log(`[Agora] Joined: ${channelName}`);
     } catch (e: any) {
-      // تجاهل أخطاء التداخل البسيطة التي يسببها React lifecycle
-      if (e.code !== "WS_ABORT") {
-        console.error("[Agora] Join Error:", e);
-      }
-      this.isJoined = false;
-      throw e;
+      if (e.code !== "WS_ABORT") console.error("[Agora] Join Error:", e);
     } finally {
       this.joinInProgress = false;
     }
   }
 
   async publishAudio() {
-    if (!this.isJoined || !this.client) return;
+    if (!this.client || this.client.connectionState !== "CONNECTED") return;
 
     try {
       if (!this.localAudioTrack) {
         this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-          AEC: true, // إلغاء الصدى
-          ANS: true, // تقليل الضوضاء
-          AGC: true  // التحكم التلقائي في مستوى الصوت
+          AEC: true, ANS: true, AGC: true
         });
       }
       
-      // التأكد من عدم النشر المزدوج
-      if (this.client.localTracks.length === 0) {
+      // منع النشر المزدوج
+      const isAlreadyPublished = this.client.localTracks.some(t => t.trackMediaType === "audio");
+      if (!isAlreadyPublished) {
         await this.client.publish(this.localAudioTrack);
-        console.log("[Agora] Audio Track Published");
+        console.log("[Agora] Audio Published");
       }
     } catch (e) {
       console.error("[Agora] Publish Error:", e);
@@ -86,16 +79,13 @@ class AgoraService {
 
   async unpublishAudio() {
     if (!this.client || !this.localAudioTrack) return;
-
     try {
-      // إلغاء النشر فقط إذا كان هناك مسار نشط
-      if (this.client.localTracks.length > 0) {
+      if (this.client.connectionState === "CONNECTED") {
         await this.client.unpublish(this.localAudioTrack);
       }
       this.localAudioTrack.stop();
       this.localAudioTrack.close();
       this.localAudioTrack = null;
-      console.log("[Agora] Audio Track Unpublished");
     } catch (e) {
       console.error("[Agora] Unpublish Error:", e);
     }
@@ -106,25 +96,21 @@ class AgoraService {
       try {
         await this.localAudioTrack.setEnabled(!muted);
       } catch (e) {
-        console.error("[Agora] Mute State Update Error:", e);
+        console.error("[Agora] Mute Update Error:", e);
       }
     }
   }
 
   async leave() {
+    if (!this.client) return;
     try {
       await this.unpublishAudio();
-      
-      if (this.client) {
-        // التأكد من أن حالة الاتصال تسمح بالمغادرة
-        if (this.isJoined) {
-          await this.client.leave();
-        }
+      const state = this.client.connectionState;
+      if (state !== "DISCONNECTED" && state !== "DISCONNECTING") {
+        await this.client.leave();
       }
-      
-      this.isJoined = false;
       this.joinInProgress = false;
-      console.log("[Agora] Left channel and cleaned up resources");
+      console.log("[Agora] Left channel");
     } catch (e) {
       console.error("[Agora] Leave Error:", e);
     }

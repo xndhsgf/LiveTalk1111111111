@@ -1,15 +1,16 @@
+
 import React, { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../../services/firebase';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { User, GiftDisplaySize } from '../../types';
+import { User, GiftDisplaySize, GiftAnimationType } from '../../types';
 
 interface GiftEvent {
   id: string;
   giftId: string;
   giftName: string;
   giftIcon: string;
-  giftAnimation: string;
+  giftAnimation: GiftAnimationType;
   senderId: string;
   senderName: string;
   senderAvatar: string;
@@ -20,206 +21,95 @@ interface GiftEvent {
   timestamp: any;
 }
 
-interface GiftAnimationLayerProps {
-  roomId: string;
-  currentUserId: string;
-  speakers?: any[];
-  onActiveChange?: (active: boolean) => void; // مضاف
-}
-
 const SmartVideoPlayer = ({ src, objectFit }: { src: string, objectFit: string }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playPromiseRef = useRef<Promise<void> | null>(null);
-
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
-
-    const startVideo = async () => {
-      try {
-        video.muted = true;
-        if (playPromiseRef.current) {
-          await playPromiseRef.current;
-        }
-        playPromiseRef.current = video.play();
-        await playPromiseRef.current;
-        
-        setTimeout(() => {
-          if (video) {
-            video.muted = false;
-            video.volume = 0.5;
-          }
-        }, 100);
-      } catch (err) {
-        console.warn("Video sound playback blocked by browser", err);
-      }
-    };
-
-    startVideo();
-
-    return () => {
-      if (video) {
-        video.pause();
-        video.src = "";
-        video.load();
-      }
-    };
+    if (video) {
+      video.muted = true;
+      video.play().then(() => {
+        setTimeout(() => { if (video) { video.muted = false; video.volume = 0.5; } }, 150);
+      }).catch(() => {});
+    }
   }, [src]);
 
   return (
-    <div className="w-full h-full relative flex items-center justify-center bg-transparent overflow-hidden">
-      <video 
-        ref={videoRef}
-        key={src}
-        src={src} 
-        autoPlay
-        playsInline
-        webkit-playsinline="true"
-        preload="auto"
-        disablePictureInPicture
-        disableRemotePlayback
-        className={`w-full h-full ${objectFit}`}
-        style={{ 
-          pointerEvents: 'none',
-          backgroundColor: 'transparent'
-        }}
-      />
-    </div>
+    <video ref={videoRef} key={src} src={src} autoPlay playsInline webkit-playsinline="true" className={`w-full h-full ${objectFit}`} style={{ pointerEvents: 'none' }} />
   );
 };
 
-export const GiftAnimationLayer = forwardRef((props: GiftAnimationLayerProps, ref) => {
+export const GiftAnimationLayer = forwardRef((props: any, ref) => {
   const { roomId, currentUserId, onActiveChange } = props;
   const [activeAnimations, setActiveAnimations] = useState<GiftEvent[]>([]);
   const playedIds = useRef(new Set<string>());
 
-  // مراقبة النشاط لإبلاغ الغرفة
   useEffect(() => {
-    if (onActiveChange) {
-      onActiveChange(activeAnimations.length > 0);
-    }
-  }, [activeAnimations, onActiveChange]);
-
-  const isVideoUrl = (url: string) => {
-    if (!url) return false;
-    return url.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || url.includes('video') || url.includes('mp4');
-  };
+    if (onActiveChange) onActiveChange(activeAnimations.length > 0);
+  }, [activeAnimations.length, onActiveChange]);
 
   const triggerAnimation = (event: GiftEvent) => {
     if (playedIds.current.has(event.id)) return;
     playedIds.current.add(event.id);
-
     setActiveAnimations(prev => [...prev, event]);
-    
-    const displayDuration = (event.duration || 5) * 1000;
-    
     setTimeout(() => {
       setActiveAnimations(prev => prev.filter(a => a.id !== event.id));
       setTimeout(() => playedIds.current.delete(event.id), 5000);
-    }, displayDuration);
+    }, (event.duration || 5) * 1000);
   };
 
-  useImperativeHandle(ref, () => ({
-    trigger: (event: GiftEvent) => triggerAnimation(event)
-  }));
+  useImperativeHandle(ref, () => ({ trigger: triggerAnimation }));
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'rooms', roomId, 'gift_events'),
-      orderBy('timestamp', 'desc'),
-      limit(5)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
+    const q = query(collection(db, 'rooms', roomId, 'gift_events'), orderBy('timestamp', 'desc'), limit(5));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((change) => {
         if (change.type === "added") {
           const data = change.doc.data();
-          const newEvent = { id: change.doc.id, ...data } as GiftEvent;
-          
-          if (newEvent.senderId === currentUserId) return;
-          
+          const event = { id: change.doc.id, ...data } as GiftEvent;
+          if (event.senderId === currentUserId) return;
           const now = Date.now();
           const eventTime = data.timestamp?.toMillis ? data.timestamp.toMillis() : now;
-          
-          if (now - eventTime < 10000) {
-            triggerAnimation(newEvent);
-          }
+          if (now - eventTime < 10000) triggerAnimation(event);
         }
       });
     });
-
     return () => unsubscribe();
   }, [roomId, currentUserId]);
 
-  const getSizeClass = (size?: GiftDisplaySize) => {
-    switch (size) {
-      case 'small': return 'w-32 h-32';
-      case 'medium': return 'w-64 h-64';
-      case 'large': return 'w-[85vw] h-[85vw]';
-      case 'full': return 'w-full h-full';
-      case 'max': return 'w-full h-full';
-      default: return 'w-64 h-64';
+  const getAnimationVariants = (type: GiftAnimationType) => {
+    switch (type) {
+      case 'shake': return { animate: { x: [-10, 10, -10, 10, 0], transition: { repeat: Infinity, duration: 0.4 } } };
+      case 'glow': return { animate: { filter: ['brightness(1)', 'brightness(1.8)', 'brightness(1)'], scale: [1, 1.05, 1], transition: { repeat: Infinity, duration: 1 } } };
+      case 'bounce': return { animate: { y: [0, -40, 0], transition: { repeat: Infinity, duration: 0.6 } } };
+      case 'rotate': return { animate: { rotate: 360, transition: { repeat: Infinity, duration: 2, ease: "linear" } } };
+      case 'slide-up': return { initial: { y: 200, opacity: 0 }, animate: { y: 0, opacity: 1 }, transition: { duration: 0.8 } };
+      case 'fly': return { initial: { x: -300, y: 100, rotate: -20 }, animate: { x: 300, y: -100, rotate: 20 }, transition: { duration: 3, ease: "linear" } };
+      default: return { initial: { scale: 0.5, opacity: 0 }, animate: { scale: 1, opacity: 1 }, exit: { scale: 1.5, opacity: 0 } };
     }
-  };
-
-  const renderGiftContent = (icon: string, displaySize: GiftDisplaySize = 'medium') => {
-    if (!icon) return null;
-    
-    const isFull = displaySize === 'full' || displaySize === 'max';
-    const objectFit = isFull ? 'object-cover' : 'object-contain';
-
-    if (isVideoUrl(icon)) {
-      return <SmartVideoPlayer src={icon} objectFit={objectFit} />;
-    }
-
-    const isImage = icon.includes('http') || icon.includes('data:image') || icon.includes('base64');
-    if (isImage) {
-      return (
-        <img 
-          src={icon} 
-          className={`w-full h-full ${objectFit}`} 
-          alt="" 
-        />
-      );
-    }
-    return <span className={`${isFull ? 'text-[200px]' : 'text-8xl'} drop-shadow-2xl`}>{icon}</span>;
   };
 
   return (
-    <div className="absolute inset-0 z-[800] pointer-events-none overflow-hidden">
+    <div className="absolute inset-0 z-[800] pointer-events-none overflow-hidden flex items-center justify-center">
       <AnimatePresence>
         {activeAnimations.map((event) => {
-          const displaySize = event.displaySize || 'medium';
-          const isFull = displaySize === 'full' || displaySize === 'max' || event.giftAnimation === 'full-screen';
-          
-          const sizeClass = getSizeClass(displaySize);
-          const showFullScreen = isFull;
-          
+          const isFull = event.displaySize === 'full' || event.displaySize === 'max' || event.giftAnimation === 'full-screen';
+          const sizeClass = event.displaySize === 'small' ? 'w-32 h-32' : event.displaySize === 'large' ? 'w-96 h-96' : isFull ? 'w-full h-full' : 'w-64 h-64';
+          const variants = getAnimationVariants(event.giftAnimation);
+
           return (
             <motion.div 
               key={event.id}
-              initial={showFullScreen ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.5, y: 50 }}
-              animate={showFullScreen ? { opacity: 1 } : { opacity: [0, 1, 1, 0], scale: [0.5, 1.1, 1, 1.2], y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ 
-                duration: showFullScreen ? 0 : 0.5,
-                ease: "linear"
-              }}
-              className={`absolute inset-0 flex flex-col items-center justify-center ${showFullScreen ? 'z-[1000]' : 'z-[800]'}`}
+              {...variants}
+              className={`absolute flex flex-col items-center justify-center ${isFull ? 'inset-0 z-[1000]' : 'z-[800]'}`}
             >
-              <div className={`relative ${sizeClass} flex items-center justify-center overflow-hidden`}>
-                 <div className="relative z-10 w-full h-full flex items-center justify-center">
-                    {renderGiftContent(event.giftIcon, displaySize)}
-                 </div>
-                 
-                 {!showFullScreen && event.quantity > 1 && (
-                    <motion.div 
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1.2 }}
-                      className="absolute -right-6 top-0 bg-gradient-to-b from-yellow-300 to-orange-600 text-white font-black text-5xl px-4 py-1 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.6)] border-2 border-white italic z-20"
-                    >
-                       X{event.quantity}
-                    </motion.div>
+              <div className={`${sizeClass} relative`}>
+                 {event.giftIcon.includes('mp4') || event.giftIcon.includes('video') ? (
+                    <SmartVideoPlayer src={event.giftIcon} objectFit={isFull ? "object-cover" : "object-contain"} />
+                 ) : (
+                    <img src={event.giftIcon} className={`w-full h-full ${isFull ? 'object-cover' : 'object-contain'}`} alt="" />
+                 )}
+                 {!isFull && event.quantity > 1 && (
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1.2 }} className="absolute -top-10 -right-10 bg-amber-500 text-white font-black text-4xl px-4 py-1 rounded-2xl shadow-xl italic border-2 border-white">X{event.quantity}</motion.div>
                  )}
               </div>
             </motion.div>

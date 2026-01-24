@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Camera, Save, User as UserIcon, FileText, Image as ImageIcon, MapPin } from 'lucide-react';
@@ -67,13 +68,22 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onClose, cu
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
     const file = e.target.files?.[0];
     if (file) {
+      // فحص أمني للوسائط المتحركة
+      const isGif = file.type === 'image/gif';
+      const isRoot = currentUser.customId?.toString() === '1';
+      const hasPermission = currentUser.moderatorPermissions?.includes('media_animated');
+
+      if (isGif && !isRoot && !hasPermission) {
+        alert('⚠️ لا تملك صلاحية رفع الصور المتحركة (GIF).');
+        return;
+      }
+
       setIsProcessing(true);
       const reader = new FileReader();
       reader.onload = async (event) => {
         if (event.target?.result) {
           const raw = event.target.result as string;
           
-          // إذا كان GIF نرفعه كما هو للحفاظ على الحركة
           if (file.type === 'image/gif') {
             if (type === 'avatar') setAvatar(raw);
             else setCover(raw);
